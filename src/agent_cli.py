@@ -1,7 +1,8 @@
 from rich.console import Console
 from rich.panel import Panel
 from rich.text import Text
-from aws_cloudops_agent import AwsCloudOpsAgent
+# from aws_cloudops_agent import AwsCloudOpsAgent
+from ollama_agent import OllamaAgent
 
 console = Console()
 
@@ -36,7 +37,7 @@ def display_response(response: str):
 
 def main():
     """Main interactive loop"""
-    agent = AwsCloudOpsAgent()
+    agent = OllamaAgent()
     display_welcome()
 
     console.print(
