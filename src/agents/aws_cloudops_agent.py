@@ -1,35 +1,18 @@
 from strands import Agent
 from strands.models import BedrockModel
 from strands_tools import use_aws
-from strands.agent.conversation_manager import SummarizingConversationManager
+from components.conversation_manager import build_conversation_manager
 
 class AwsCloudOpsAgent(Agent):
     def __init__(self, model: BedrockModel = None, tools: list = [use_aws]):
-
-        self.conversation_manager = SummarizingConversationManager(
-            summary_ratio=0.3,
-            preserve_recent_messages=10,
-            summarization_system_prompt=self._get_summarization_prompt()
-        )
 
         # Initialize the parent Agent class
         super().__init__(
             model=model,
             tools=tools,
             system_prompt=self._get_system_prompt(),
-            conversation_manager=self.conversation_manager,
-        )
-        
-    def _get_summarization_prompt(self) -> str:
-        """Get the system prompt for the agent"""
-        return """
-        You are summarizing an AWS CloudOps conversation. Produce concise bullet points that:
-        - Keep service names, regions, ARNs, resource IDs, CLI/SDK commands, key parameters and exit codes
-        - Preserve architecture decisions, trade-offs, and cost/security implications
-        - Capture tool usage/results pairs (tool name → key result)
-        - Omit chit-chat; focus on actions, findings, and next steps
-        Format as bullet points only.
-        """       
+            conversation_manager=build_conversation_manager(),
+        )   
 
     def _get_system_prompt(self) -> str:
         """Get the system prompt for the agent"""
