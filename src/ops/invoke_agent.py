@@ -33,6 +33,7 @@ agent_core_client = boto3.client("bedrock-agentcore")
 
 # Generate session ID for the conversation
 session_id = str(uuid.uuid4())
+print(f"🆔 Session ID: {session_id}")
 
 print("\n🤖 AWS CloudOps Agent - Chat Mode")
 print("Type 'exit', 'end', or 'bye' to quit\n")
@@ -84,5 +85,3 @@ while True:
     # Print response with lazy loading (streaming)
     print_agentcore_response_sync(response)
     print("\n" + "=" * 50)
-
-
