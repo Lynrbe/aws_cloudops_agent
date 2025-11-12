@@ -1,0 +1,245 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: |
+  CloudFormation template to deploy the RAG Data Ingestion CI/CD Pipeline (Pipeline 2). 
+  It synchronizes RAG documents from GitHub to S3 and triggers the Bedrock Knowledge Base indexing.
+
+# =================================================================
+# PARAMETERS - Cần cung cấp các giá trị này khi triển khai
+# =================================================================
+Parameters:
+  KnowledgeBaseId:
+    Type: String
+    Description: The ID of your existing Bedrock Knowledge Base.
+  
+  RAGDocumentsS3Bucket:
+    Type: String
+    Description: The name of the existing S3 Bucket where RAG documents are stored (must exist).
+  
+  SourceRepoOwner:
+    Type: String
+    Description: The owner (user/organization) of the GitHub repository.
+  SourceRepoName:
+    Type: String
+    Description: The name of the GitHub repository containing the 'rag_documents' folder.
+  SourceRepoBranch:
+    Type: String
+    Default: main
+    Description: The branch to monitor for changes.
+  GitHubToken:
+    Type: String
+    NoEcho: true
+    Description: GitHub Personal Access Token for CodePipeline access (with repo/webhook permissions).
+
+  # Để dễ dàng triển khai, giả định mã Lambda đã được đóng gói và đặt trong S3
+  LambdaCodeBucket:
+    Type: String
+    Description: S3 Bucket containing the Lambda function deployment package (zip file).
+  LambdaCodeKey:
+    Type: String
+    Description: S3 Key (path/filename) of the Lambda function deployment package (e.g., ingestion_lambda.zip).
+
+# =================================================================
+# RESOURCES
+# =================================================================
+Resources:
+
+  # -----------------------------------------------------------------
+  # 1. IAM Roles
+  # -----------------------------------------------------------------
+  
+  # IAM Role cho Ingestion Lambda (Cần quyền truy cập Bedrock)
+  IngestionLambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: lambda.amazonaws.com }
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: BedrockIngestionPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: arn:aws:logs:*:*:*
+              - Effect: Allow
+                Action:
+                  - bedrock-agent:ListDataSources
+                  - bedrock-agent:StartIngestionJob
+                Resource: !Sub "arn:aws:bedrock-agent:${AWS::Region}:${AWS::AccountId}:knowledge-base/${KnowledgeBaseId}"
+  
+  # IAM Role cho CodeBuild và CodePipeline
+  CodeBuildServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: [codebuild.amazonaws.com, codepipeline.amazonaws.com] }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - "arn:aws:iam::aws:policy/AdministratorAccess" # Dùng tạm cho đơn giản, nên dùng policy chi tiết hơn trong Production
+      Policies:
+        - PolicyName: CodeBuildPipelinePolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:GetObjectVersion
+                Resource: "*" # Quyền S3 cho CodePipeline Artifact Store
+              # Quyền S3 sync (Read, Write, Delete)
+              - Effect: Allow
+                Action: 
+                  - s3:PutObject
+                  - s3:DeleteObject
+                  - s3:ListBucket
+                Resource: 
+                  - !Sub "arn:aws:s3:::${RAGDocumentsS3Bucket}"
+                  - !Sub "arn:aws:s3:::${RAGDocumentsS3Bucket}/*"
+              - Effect: Allow
+                Action: 
+                  - cloudwatch:PutMetricData
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: "*"
+
+
+  # -----------------------------------------------------------------
+  # 2. Lambda & S3 Trigger
+  # -----------------------------------------------------------------
+
+  # Lambda Ingestion (Sử dụng mã Python đã cung cấp)
+  IngestionLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "RAG-Ingestion-Lambda-${KnowledgeBaseId}"
+      Runtime: python3.11
+      Handler: index.lambda_handler
+      Code:
+        S3Bucket: !Ref LambdaCodeBucket
+        S3Key: !Ref LambdaCodeKey
+      Role: !GetAtt IngestionLambdaExecutionRole.Arn
+      Timeout: 60
+      Environment:
+        Variables:
+          KNOWLEDGE_BASE_ID: !Ref KnowledgeBaseId
+  
+  # Cấp quyền cho S3 để kích hoạt Lambda
+  S3LambdaInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !GetAtt IngestionLambda.Arn
+      Principal: s3.amazonaws.com
+      SourceAccount: !Ref AWS::AccountId
+      SourceArn: !Sub "arn:aws:s3:::${RAGDocumentsS3Bucket}"
+
+  # Cấu hình S3 Event Notification để gọi Lambda khi có file mới
+  RAGDocumentsBucketNotification:
+    Type: AWS::S3::BucketNotification
+    Properties:
+      Bucket: !Ref RAGDocumentsS3Bucket
+      NotificationConfiguration:
+        LambdaConfigurations:
+          - Event: s3:ObjectCreated:*
+            Filter:
+              S3Key:
+                Rules:
+                  - Name: prefix
+                    Value: rag_documents/ # Chỉ kích hoạt nếu file nằm trong thư mục sync
+            Function: !GetAtt IngestionLambda.Arn
+    DependsOn: S3LambdaInvokePermission # Đảm bảo permission được cấp trước khi cấu hình notification
+
+  # -----------------------------------------------------------------
+  # 3. CodeBuild Project
+  # -----------------------------------------------------------------
+
+  RAGDataSyncCodeBuild:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: !Sub "RAG-Data-Sync-Build-${KnowledgeBaseId}"
+      ServiceRole: !GetAtt CodeBuildServiceRole.Arn
+      Artifacts:
+        Type: NO_ARTIFACTS
+      Environment:
+        Type: LINUX_CONTAINER
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: aws/codebuild/standard:7.0
+      Source:
+        Type: CODEPIPELINE
+      BuildSpec: !Sub |
+        version: 0.2
+        phases:
+          pre_build:
+            commands:
+              - echo "Running pre_build phase..."
+              # Tạo biến môi trường S3 Bucket
+              - RAG_S3_BUCKET_NAME="${RAGDocumentsS3Bucket}"
+              - echo "Sẽ đồng bộ tài liệu đến S3 Bucket: $RAG_S3_BUCKET_NAME"
+          build:
+            commands:
+              - echo "Running build phase (S3 Sync)..."
+              # Lệnh đồng bộ quan trọng
+              - aws s3 sync --delete --exact-timestamps rag_documents/ s3://${RAG_S3_BUCKET_NAME}/rag_documents/
+          post_build:
+            commands:
+              - echo "Đồng bộ tài liệu RAG hoàn tất. S3 Event sẽ kích hoạt Lambda Indexing."
+
+  # -----------------------------------------------------------------
+  # 4. CodePipeline
+  # -----------------------------------------------------------------
+
+  RAGDataIngestionPipeline:
+    Type: AWS::CodePipeline::Pipeline
+    Properties:
+      Name: !Sub "RAG-Data-Ingestion-Pipeline-${KnowledgeBaseId}"
+      RoleArn: !GetAtt CodeBuildServiceRole.Arn
+      ArtifactStore: # Cần một S3 Bucket để lưu trữ Artifact (CFN sẽ tự tạo nếu không chỉ định)
+        Type: S3
+        Location: !Sub "codepipeline-${AWS::Region}-${AWS::AccountId}-artifacts" # Thường là tên bucket mặc định của CodePipeline
+      Stages:
+        - Name: Source
+          Actions:
+            - Name: Source
+              ActionTypeId:
+                Category: Source
+                Owner: ThirdParty
+                Provider: GitHub
+                Version: '1'
+              OutputArtifacts:
+                - Name: SourceArtifact
+              Configuration:
+                Owner: !Ref SourceRepoOwner
+                Repo: !Ref SourceRepoName
+                Branch: !Ref SourceRepoBranch
+                OAuthToken: !Ref GitHubToken
+                PollForSourceChanges: 'false' # Nên dùng Webhook thay vì Poll trong Production
+              RunOrder: 1
+        
+        - Name: Build
+          Actions:
+            - Name: DataSyncBuild
+              InputArtifacts:
+                - Name: SourceArtifact
+              ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Provider: CodeBuild
+                Version: '1'
+              Configuration:
+                ProjectName: !Ref RAGDataSyncCodeBuild
+              RunOrder: 1

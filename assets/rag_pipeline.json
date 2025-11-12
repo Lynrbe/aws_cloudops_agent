@@ -1,0 +1,34 @@
+[
+  {
+    "ParameterKey": "KnowledgeBaseId",
+    "ParameterValue": "<ID_CỦA_BEDROCK_KB_CỦA_BẠN>"
+  },
+  {
+    "ParameterKey": "RAGDocumentsS3Bucket",
+    "ParameterValue": "<TÊN_S3_CHỨA_TÀI_LIỆU_RAG>"
+  },
+  {
+    "ParameterKey": "SourceRepoOwner",
+    "ParameterValue": "<CHỦ_SỞ_HỮU_GITHUB>"
+  },
+  {
+    "ParameterKey": "SourceRepoName",
+    "ParameterValue": "<TÊN_REPO_GITHUB>"
+  },
+  {
+    "ParameterKey": "SourceRepoBranch",
+    "ParameterValue": "main" 
+  },
+  {
+    "ParameterKey": "GitHubToken",
+    "ParameterValue": "<GITHUB_PAT_CỦA_BẠN_RẤT_QUAN_TRỌNG>"
+  },
+  {
+    "ParameterKey": "LambdaCodeBucket",
+    "ParameterValue": "<S3_CHỨA_FILE_LAMBDA_ZIP>"
+  },
+  {
+    "ParameterKey": "LambdaCodeKey",
+    "ParameterValue": "ingestion_lambda.zip"
+  }
+]
