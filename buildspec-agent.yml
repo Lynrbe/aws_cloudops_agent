@@ -1,0 +1,50 @@
+version: 0.2
+
+# Biến môi trường được cung cấp bởi CodeBuild Project:
+# ECR_REPO_URI: (URI đầy đủ của ECR Repository, ví dụ: 123456789012.dkr.ecr.us-east-1.amazonaws.com/my-agent-repo)
+# AWS_DEFAULT_REGION: (Region hiện tại)
+
+phases:
+  install:
+    commands:
+      # Cài đặt các công cụ cần thiết (cần thiết cho một số image cơ bản)
+      - echo "Installing dependencies..."
+      # Nếu CodeBuild image là Standard:X.0, Docker đã được cài sẵn.
+      
+  pre_build:
+    commands:
+      # Lấy thông tin đăng nhập từ AWS ECR
+      - echo "Logging in to Amazon ECR..."
+      - AWS_ACCOUNT_ID=$(echo $ECR_REPO_URI | cut -d. -f1)
+      - ECR_URI_BASE=$AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com
+      - aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin $ECR_URI_BASE
+
+      # Tạo Tag cho Image (sử dụng 7 ký tự đầu của Commit ID)
+      - IMAGE_TAG=$(echo $CODEBUILD_RESOLVED_SOURCE_VERSION | cut -c 1-7)
+      - ECR_IMAGE_TAGGED=$ECR_REPO_URI:$IMAGE_TAG
+      - ECR_IMAGE_LATEST=$ECR_REPO_URI:latest
+      - echo "ECR Tagged Image: $ECR_IMAGE_TAGGED"
+      - echo "ECR Latest Image: $ECR_IMAGE_LATEST"
+
+  build:
+    commands:
+      - echo "Starting Docker build..."
+      # 1. Build Image (Tag cả :latest và Tag bằng Commit ID)
+      # Giả định Dockerfile nằm trong thư mục gốc (./)
+      - docker build -t $ECR_IMAGE_LATEST -t $ECR_IMAGE_TAGGED .
+      
+  post_build:
+    commands:
+      - echo "Pushing Docker image to ECR..."
+      # 2. Push cả hai tags lên ECR
+      - docker push $ECR_IMAGE_LATEST
+      - docker push $ECR_IMAGE_TAGGED
+      
+      # 3. Tạo Artifact (imagedefinitions.json) cho Stage Deploy (ECS)
+      # Tên container ("agent-container-name") phải khớp với Task Definition trong CFN
+      - printf '[{"name":"agent-container-name","imageUri":"%s"}]' $ECR_IMAGE_TAGGED > imagedefinitions.json
+      - echo "Image Definition file created for CodePipeline Deploy Stage."
+
+artifacts:
+  files:
+    - imagedefinitions.json
