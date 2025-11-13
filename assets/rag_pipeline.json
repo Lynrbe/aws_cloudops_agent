@@ -5,7 +5,7 @@
   },
   {
     "ParameterKey": "RAGDocumentsS3Bucket",
-    "ParameterValue": "<TÊN_S3_CHỨA_TÀI_LIỆU_RAG>"
+    "ParameterValue": "s3://test-cloudops-agent-kb-bucket/docs/"
   },
   {
     "ParameterKey": "SourceRepoOwner",
@@ -13,15 +13,15 @@
   },
   {
     "ParameterKey": "SourceRepoName",
-    "ParameterValue": "<TÊN_REPO_GITHUB>"
+    "ParameterValue": "https://github.boschdevcloud.com/BGSV-DevOps/aws-cloudops-agent.git"
   },
   {
     "ParameterKey": "SourceRepoBranch",
-    "ParameterValue": "main" 
+    "ParameterValue": "feature/agent-response" 
   },
   {
     "ParameterKey": "GitHubToken",
-    "ParameterValue": "<GITHUB_PAT_CỦA_BẠN_RẤT_QUAN_TRỌNG>"
+    "ParameterValue": "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"
   },
   {
     "ParameterKey": "LambdaCodeBucket",
