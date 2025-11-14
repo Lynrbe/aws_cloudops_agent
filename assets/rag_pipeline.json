@@ -1,34 +1,38 @@
 [
   {
-    "ParameterKey": "KnowledgeBaseId",
-    "ParameterValue": "<ID_CỦA_BEDROCK_KB_CỦA_BẠN>"
-  },
-  {
-    "ParameterKey": "RAGDocumentsS3Bucket",
-    "ParameterValue": "s3://test-cloudops-agent-kb-bucket/docs/"
+    "ParameterKey": "ProjectName",
+    "ParameterValue": "MyRAGAgent" 
   },
   {
     "ParameterKey": "SourceRepoOwner",
-    "ParameterValue": "<CHỦ_SỞ_HỮU_GITHUB>"
+    "ParameterValue": "lynrbe26"
   },
   {
     "ParameterKey": "SourceRepoName",
-    "ParameterValue": "https://github.boschdevcloud.com/BGSV-DevOps/aws-cloudops-agent.git"
+    "ParameterValue": "https://github.com/lynrbe26/ai_agent"
   },
   {
     "ParameterKey": "SourceRepoBranch",
-    "ParameterValue": "feature/agent-response" 
+    "ParameterValue": "feature" 
   },
   {
     "ParameterKey": "GitHubToken",
     "ParameterValue": "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"
   },
   {
+    "ParameterKey": "S3BucketNamePrefix",
+    "ParameterValue": "test-cloudops-agent-kb-bucket" 
+  },
+  {
     "ParameterKey": "LambdaCodeBucket",
-    "ParameterValue": "<S3_CHỨA_FILE_LAMBDA_ZIP>"
+    "ParameterValue": "s3://test-ingest-lambda-bucket"
   },
   {
     "ParameterKey": "LambdaCodeKey",
     "ParameterValue": "ingestion_lambda.zip"
+  },
+  {
+    "ParameterKey": "VectorStoreIndexName",
+    "ParameterValue": "rag-agent-index"
   }
 ]
