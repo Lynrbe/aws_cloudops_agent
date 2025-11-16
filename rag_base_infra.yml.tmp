@@ -10,22 +10,19 @@ Parameters:
   ProjectName:
     Type: String
     Default: RAG-System
-    Description: Base name for all resources and Export names.
-
+    Description: TÃªn cÆ¡ sá»Ÿ cho táº¥t cáº£ cÃ¡c tÃ i nguyÃªn vÃ  tÃªn Export.
   EmbeddingModelArn:
     Type: String
-    Default: arn:aws:bedrock:ap-southeast-1::foundation-model/amazon.titan-embed-text-v2:0
-    Description: ARN of the Foundation Model used to create Embeddings.
-
+    Default: arn:aws:bedrock:us-east-1::foundation-model/amazon.titan-embed-text-v1
+    Description: ARN cá»§a Foundation Model dÃ¹ng Ä‘á»ƒ táº¡o Embeddings.
   VectorStoreIndexName:
     Type: String
     Default: rag-vector-index
-    Description: Name of the Index (Table) in OpenSearch.
-
+    Description: TÃªn cá»§a Index (Báº£ng) trong OpenSearch.
   S3BucketNamePrefix:
     Type: String
     Default: rag-documents-store
-    Description: Prefix for S3 Bucket name.
+    Description: Tiá»n tá»‘ tÃªn S3 Bucket.
 
 # =================================================================
 # RESOURCES
@@ -45,59 +42,20 @@ Resources:
   # -----------------------------------------------------------------
   # 2. OPENSEARCH SERVERLESS
   # -----------------------------------------------------------------
-
-  # Encryption Security Policy (Required before creating collection)
-  OpenSearchEncryptionPolicy:
-    Type: AWS::OpenSearchServerless::SecurityPolicy
-    Properties:
-      Name: rag-system-encryption-policy
-      Type: encryption
-      Policy: !Sub |
-        {
-          "Rules": [
-            {
-              "ResourceType": "collection",
-              "Resource": ["collection/rag-system-collection"]
-            }
-          ],
-          "AWSOwnedKey": true
-        }
-
-  # Network Security Policy (Required for public access)
-  OpenSearchNetworkPolicy:
-    Type: AWS::OpenSearchServerless::SecurityPolicy
-    Properties:
-      Name: rag-system-network-policy
-      Type: network
-      Policy: !Sub |
-        [
-          {
-            "Rules": [
-              {
-                "ResourceType": "collection",
-                "Resource": ["collection/rag-system-collection"]
-              }
-            ],
-            "AllowFromPublic": true
-          }
-        ]
-
   OpenSearchCollection:
     Type: AWS::OpenSearchServerless::Collection
     Properties:
-      Name: rag-system-collection
+      Name: !Sub "${ProjectName}-RAG-Collection"
       Type: VECTORSEARCH
-    DependsOn:
-      - OpenSearchEncryptionPolicy
-      - OpenSearchNetworkPolicy
 
-  # Data Access Policy - Grant permissions to Knowledge Base Role
+  # Data Access Policy (Cáº¥p quyá»n cho Knowledge Base Role)
+  # Sá»­ dá»¥ng Fn::Sub vá»›i mapping Ä‘á»ƒ chÃ¨n ARN/Ref an toÃ n
   OpenSearchDataAccessPolicy:
     Type: AWS::OpenSearchServerless::AccessPolicy
     Properties:
-      Name: rag-system-data-access-policy
+      Name: !Sub "${ProjectName}-DataAccess-Policy"
       Type: data
-      Policy:
+      Policy: 
         !Sub
           - |
             [
@@ -105,7 +63,7 @@ Resources:
                 "Rules": [
                   {
                     "ResourceType": "index",
-                    "Resource": ["index/rag-system-collection/*"],
+                    "ResourceNames": ["${VectorStoreIndexName}"],
                     "Permission": [
                       "aoss:CreateIndex",
                       "aoss:DescribeIndex",
@@ -117,11 +75,9 @@ Resources:
                   },
                   {
                     "ResourceType": "collection",
-                    "Resource": ["collection/rag-system-collection"],
+                    "ResourceNames": ["${OpenSearchCollectionName}"],
                     "Permission": [
-                      "aoss:CreateCollectionItems",
-                      "aoss:UpdateCollectionItems",
-                      "aoss:DescribeCollectionItems"
+                      "aoss:DescribeCollection"
                     ]
                   }
                 ],
@@ -129,14 +85,14 @@ Resources:
               }
             ]
           - {
+              VectorStoreIndexName: !Ref VectorStoreIndexName,
+              OpenSearchCollectionName: !Ref OpenSearchCollection,
               KBRoleArn: !GetAtt KnowledgeBaseServiceRole.Arn
             }
-    DependsOn:
-      - KnowledgeBaseServiceRole
-      - OpenSearchCollection
+    DependsOn: KnowledgeBaseServiceRole
 
   # -----------------------------------------------------------------
-  # 3. IAM Role for Knowledge Base (Assume Role: bedrock.amazonaws.com)
+  # 3. IAM Role cho Knowledge Base (Assume Role: bedrock.amazonaws.com)
   # -----------------------------------------------------------------
   KnowledgeBaseServiceRole:
     Type: AWS::IAM::Role
@@ -173,45 +129,58 @@ Resources:
 
   # -----------------------------------------------------------------
   # 4. BEDROCK KNOWLEDGE BASE & DATA SOURCE
-  # NOTE: These will be created manually via AWS CLI
   # -----------------------------------------------------------------
+  RAGKnowledgeBase:
+    Type: AWS::Bedrock::KnowledgeBase
+    Properties:
+      Name: !Sub "${ProjectName}-KB-${AWS::StackName}"
+      RoleArn: !GetAtt KnowledgeBaseServiceRole.Arn
+      KnowledgeBaseConfiguration:
+        Type: AMAZON_KNOWLEDGE_BASE
+        FoundationModelArn: !Ref EmbeddingModelArn
+      StorageConfiguration:
+        Type: OPENSEARCH_SERVERLESS_VEC
+        VectorKnowledgeBaseConfiguration:
+          EmbeddingModelArn: !Ref EmbeddingModelArn
+        OpenSearchServerlessConfiguration:
+          CollectionArn: !GetAtt OpenSearchCollection.Arn
+          VectorField: "bedrock-vector"
+          TextField: "text"
+          IndexName: !Ref VectorStoreIndexName
+    DependsOn: OpenSearchDataAccessPolicy
+
+  RAGKnowledgeBaseDataSource:
+    Type: AWS::Bedrock::DataSource
+    Properties:
+      Name: "RAG-Document-Data-Source"
+      KnowledgeBaseId: !Ref RAGKnowledgeBase
+      DataSourceConfiguration:
+        Type: S3
+        S3Configuration:
+          BucketArn: !GetAtt RAGDocumentsS3Bucket.Arn
+          InclusionPrefixes:
+            - rag_documents/
 
 # =================================================================
-# OUTPUTS - For cross-stack references and manual KB creation
+# OUTPUTS (Äá»ƒ Stack khÃ¡c tham chiáº¿u chÃ©o)
 # =================================================================
 Outputs:
   RAGDocumentsS3BucketName:
-    Description: S3 Bucket name for RAG documents
     Value: !Ref RAGDocumentsS3Bucket
     Export:
       Name: !Sub "${ProjectName}-RAGDocumentsS3BucketName"
 
-  RAGDocumentsS3BucketArn:
-    Description: S3 Bucket ARN for RAG documents
-    Value: !GetAtt RAGDocumentsS3Bucket.Arn
+  KnowledgeBaseId:
+    Value: !Ref RAGKnowledgeBase
     Export:
-      Name: !Sub "${ProjectName}-RAGDocumentsS3BucketArn"
+      Name: !Sub "${ProjectName}-KnowledgeBaseId"
+
+  KnowledgeBaseDataSourceId:
+    Value: !Ref RAGKnowledgeBaseDataSource
+    Export:
+      Name: !Sub "${ProjectName}-KnowledgeBaseDataSourceId"
 
   OpenSearchCollectionArn:
-    Description: OpenSearch Serverless Collection ARN
     Value: !GetAtt OpenSearchCollection.Arn
     Export:
       Name: !Sub "${ProjectName}-OpenSearchCollectionArn"
-
-  OpenSearchCollectionEndpoint:
-    Description: OpenSearch Serverless Collection Endpoint
-    Value: !GetAtt OpenSearchCollection.CollectionEndpoint
-    Export:
-      Name: !Sub "${ProjectName}-OpenSearchCollectionEndpoint"
-
-  KnowledgeBaseServiceRoleArn:
-    Description: IAM Role ARN for Knowledge Base (use this when creating KB manually)
-    Value: !GetAtt KnowledgeBaseServiceRole.Arn
-    Export:
-      Name: !Sub "${ProjectName}-KnowledgeBaseServiceRoleArn"
-
-  VectorIndexName:
-    Description: Vector index name to use for Knowledge Base
-    Value: !Ref VectorStoreIndexName
-    Export:
-      Name: !Sub "${ProjectName}-VectorIndexName"
