@@ -48,12 +48,12 @@ jobs:
 
     # 2. Terraform Validate & Plan (Kiểm tra)
     - name: Terraform Plan
-      run: terraform -chdir=infra plan
+      run: terraform -chdir=modules plan
       
     # 3. Terraform Apply
     - name: Terraform Apply
       run: |
-        terraform -chdir=infra apply -auto-approve \
+        terraform -chdir=modules apply -auto-approve \
           -var "ingest_artifact_key=ingest-${{ env.COMMIT_SHA }}.zip" \
           -var "retrieve_artifact_key=retrieve-${{ env.COMMIT_SHA }}.zip" \
           -var "artifact_bucket_name=${{ env.ARTIFACT_BUCKET }}"
