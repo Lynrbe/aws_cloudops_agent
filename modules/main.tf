@@ -7,8 +7,8 @@ module "opensearch" {
   source = "./opensearch.tf"
 }
 
-module "bedrock_kb" {
-  source = "./bedrock_kb.tf"
+module "knowledge_base" {
+  source = "./knowledge_base.tf"
 }
 
 module "iam" {
