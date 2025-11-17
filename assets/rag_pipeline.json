@@ -1,0 +1,38 @@
+[
+  {
+    "ParameterKey": "ProjectName",
+    "ParameterValue": "MyRAGAgent" 
+  },
+  {
+    "ParameterKey": "SourceRepoOwner",
+    "ParameterValue": "lynrbe26"
+  },
+  {
+    "ParameterKey": "SourceRepoName",
+    "ParameterValue": "https://github.com/lynrbe26/ai_agent"
+  },
+  {
+    "ParameterKey": "SourceRepoBranch",
+    "ParameterValue": "feature" 
+  },
+  {
+    "ParameterKey": "GitHubToken",
+    "ParameterValue": "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"
+  },
+  {
+    "ParameterKey": "S3BucketNamePrefix",
+    "ParameterValue": "test-cloudops-agent-kb-bucket" 
+  },
+  {
+    "ParameterKey": "LambdaCodeBucket",
+    "ParameterValue": "s3://test-ingest-lambda-bucket"
+  },
+  {
+    "ParameterKey": "LambdaCodeKey",
+    "ParameterValue": "ingestion_lambda.zip"
+  },
+  {
+    "ParameterKey": "VectorStoreIndexName",
+    "ParameterValue": "rag-agent-index"
+  }
+]

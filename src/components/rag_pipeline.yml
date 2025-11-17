@@ -1,0 +1,289 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: |
+  CloudFormation template to deploy the RAG Data Ingestion CI/CD Pipeline (Pipeline 2) and shared IAM Roles.
+  It Imports resources from Base Stack and Exports Roles for Agent Stack (Pipeline 1).
+
+# =================================================================
+# PARAMETERS & IMPORTS
+# =================================================================
+Parameters:
+  BaseStackProjectName:
+    Type: String
+    Default: RAG-System
+    Description: Tên dự án (ProjectName) được sử dụng trong Stack Hạ tầng Cơ bản để Import các giá trị.
+  SourceRepoOwner:
+    Type: String
+    Description: Owner của GitHub repository.
+  SourceRepoName:
+    Type: String
+    Description: Tên GitHub repository chứa mã nguồn (cho Lambda/BuildSpec).
+  SourceRepoBranch:
+    Type: String
+    Default: main
+  GitHubToken:
+    Type: String
+    NoEcho: true
+    Description: GitHub Personal Access Token.
+  
+  # Lambda Code Deploy (Sẽ được thay thế bằng tự động hóa sau)
+  LambdaCodeBucket:
+    Type: String
+    Description: S3 Bucket chứa mã Lambda (ingestion_lambda.zip).
+  LambdaCodeKey:
+    Type: String
+    Description: S3 Key (path/filename) của mã Lambda.
+
+Mappings:
+  ImportValues:
+    # Lấy ID và Tên Bucket từ Stack Hạ tầng Cơ bản
+    KBId: { Value: !ImportValue !Sub "${BaseStackProjectName}-KnowledgeBaseId" }
+    S3Bucket: { Value: !ImportValue !Sub "${BaseStackProjectName}-RAGDocumentsS3BucketName" }
+    
+# Lấy giá trị Import ra để dễ sử dụng
+Conditions:
+  AlwaysTrue: !Equals [true, true]
+  
+# =================================================================
+# RESOURCES
+# =================================================================
+Resources:
+  
+  # -----------------------------------------------------------------
+  # 1. IAM Policy & Role cho Agent Runtime (Core Component, dùng cho Pipeline 1)
+  # -----------------------------------------------------------------
+  
+  # Policy 1: Agent Runtime Permissions (Từ AgentRuntimeRole.json)
+  AgentRuntimeManagedPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      Description: Permissions required for the Bedrock Agent Runtime (ECR, Logs, Bedrock Invocation).
+      PolicyDocument: 
+        Version: "2012-10-17"
+        Statement: 
+          # Đã chuyển các ARN cố định sang biến Sub/Ref
+          - Effect: Allow
+            Action: [ecr:BatchGetImage, ecr:GetDownloadUrlForLayer]
+            Resource: [!Sub "arn:aws:ecr:${AWS::Region}:${AWS::AccountId}:repository/*"]
+          - Effect: Allow
+            Action: [logs:DescribeLogStreams, logs:CreateLogGroup]
+            Resource: [!Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/bedrock-agentcore/runtimes/*"]
+          # ... (Thêm các Statement còn lại từ AgentRuntimeRole.json)
+          - Effect: Allow
+            Action: [ecr:GetAuthorizationToken, xray:PutTraceSegments, xray:PutTelemetryRecords, xray:GetSamplingRules, xray:GetSamplingTargets, logs:DescribeLogGroups]
+            Resource: "*"
+          - Effect: Allow
+            Action: cloudwatch:PutMetricData
+            Resource: "*"
+            Condition: { StringEquals: { "cloudwatch:namespace": "bedrock-agentcore" } }
+          - Effect: Allow
+            Action: [bedrock-agentcore:GetWorkloadAccessToken, bedrock-agentcore:GetWorkloadAccessTokenForJWT, bedrock-agentcore:GetWorkloadAccessTokenForUserId]
+            Resource: [!Sub "arn:aws:bedrock-agentcore:${AWS::Region}:${AWS::AccountId}:workload-identity-directory/default", !Sub "arn:aws:bedrock-agentcore:${AWS::Region}:${AWS::AccountId}:workload-identity-directory/default/workload-identity/*"]
+          - Effect: Allow
+            Action: [bedrock:InvokeModel, bedrock:InvokeModelWithResponseStream]
+            Resource: ["arn:aws:bedrock:*::foundation-model/*", !Sub "arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:*"]
+          
+  # Policy 2: Model Invoke CloudWatch Logging Policy (Từ bac-cw-model-invoke-permiossion-policy.json)
+  ModelInvokeCWManagedPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      PolicyDocument: 
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action: [logs:CreateLogStream, logs:PutLogEvents]
+            Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group::log-stream:aws/bedrock/modelinvocations"
+
+  # Agent Runtime Role (Role cốt lõi cho Agent, dùng cho Task Definition)
+  AgentRuntimeRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "Bedrock-Agent-Runtime-Role-${!FindInMap [ImportValues, KBId, Value]}"
+      # Sử dụng trust-policy.json
+      AssumeRolePolicyDocument: 
+        Version: "2012-10-17"		 	 	 
+        Statement: 
+          - Sid: AssumeRolePolicy
+            Effect: Allow
+            Principal: { Service: "bedrock-agentcore.amazonaws.com" }
+            Action: "sts:AssumeRole"
+            Condition: 
+              StringEquals: { "aws:SourceAccount": !Ref AWS::AccountId }
+              ArnLike: { "aws:SourceArn": !Sub "arn:aws:bedrock-agentcore:${AWS::Region}:${AWS::AccountId}:*" }
+      ManagedPolicyArns:
+        - !Ref AgentRuntimeManagedPolicy
+        - !Ref ModelInvokeCWManagedPolicy
+
+
+  # -----------------------------------------------------------------
+  # 2. IAM Roles cho CI/CD (Dùng chung cho cả Pipeline 1 và 2)
+  # -----------------------------------------------------------------
+  
+  # IAM Role cho Ingestion Lambda 
+  IngestionLambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: lambda.amazonaws.com }
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: IngestionJobPermissions
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: [logs:CreateLogGroup, logs:CreateLogStream, logs:PutLogEvents]
+                Resource: arn:aws:logs:*:*:*
+              - Effect: Allow
+                Action: [bedrock-agent:ListDataSources, bedrock-agent:StartIngestionJob]
+                Resource: !Sub "arn:aws:bedrock-agent:${AWS::Region}:${AWS::AccountId}:knowledge-base/${!FindInMap [ImportValues, KBId, Value]}"
+  
+  # IAM Role cho CodeBuild và CodePipeline (Dùng cho cả Pipeline 1 và 2)
+  CodeBuildServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: [codebuild.amazonaws.com, codepipeline.amazonaws.com] }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - "arn:aws:iam::aws:policy/AdministratorAccess" # Tối ưu hóa trong Production
+      Policies:
+        - PolicyName: CodeBuildPipelinePolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              # Quyền S3 cho CodePipeline Artifact Store
+              - Effect: Allow
+                Action: [s3:GetObject, s3:PutObject, s3:GetObjectVersion, s3:ListBucket]
+                Resource: "*" 
+              # Quyền S3 sync (Read, Write, Delete) - dùng cho Pipeline 2
+              - Effect: Allow
+                Action: [s3:PutObject, s3:DeleteObject, s3:ListBucket]
+                Resource: [!Sub "arn:aws:s3:::${!FindInMap [ImportValues, S3Bucket, Value]}", !Sub "arn:aws:s3:::${!FindInMap [ImportValues, S3Bucket, Value]}/*"]
+              # Quyền ECR - dùng cho Pipeline 1 (Docker Build)
+              - Effect: Allow
+                Action: [ecr:BatchCheckLayerAvailability, ecr:GetDownloadUrlForLayer, ecr:GetAuthorizationToken, ecr:BatchGetImage, ecr:PutImage, ecr:InitiateLayerUpload, ecr:UploadLayerPart, ecr:CompleteLayerUpload]
+                Resource: "*" 
+
+
+  # -----------------------------------------------------------------
+  # 3. Lambda & S3 Trigger (Pipeline 2 Logic)
+  # -----------------------------------------------------------------
+  KBIdValue:
+    Value: !FindInMap [ImportValues, KBId, Value]
+
+  IngestionLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "RAG-Ingestion-Lambda-${KBIdValue}"
+      Runtime: python3.11
+      Handler: index.lambda_handler
+      Code:
+        S3Bucket: !Ref LambdaCodeBucket
+        S3Key: !Ref LambdaCodeKey
+      Role: !GetAtt IngestionLambdaExecutionRole.Arn
+      Timeout: 60
+      Environment:
+        Variables:
+          KNOWLEDGE_BASE_ID: !FindInMap [ImportValues, KBId, Value]
+  
+  S3LambdaInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !GetAtt IngestionLambda.Arn
+      Principal: s3.amazonaws.com
+      SourceAccount: !Ref AWS::AccountId
+      SourceArn: !Sub "arn:aws:s3:::${!FindInMap [ImportValues, S3Bucket, Value]}"
+
+  RAGDocumentsBucketNotification:
+    Type: AWS::S3::BucketNotification
+    Properties:
+      Bucket: !FindInMap [ImportValues, S3Bucket, Value]
+      NotificationConfiguration:
+        LambdaConfigurations:
+          - Event: s3:ObjectCreated:*
+            Filter:
+              S3Key:
+                Rules:
+                  - Name: prefix
+                    Value: rag_documents/
+            Function: !GetAtt IngestionLambda.Arn
+    DependsOn: S3LambdaInvokePermission
+
+  # -----------------------------------------------------------------
+  # 4. CodeBuild và CodePipeline (Pipeline 2 Logic)
+  # -----------------------------------------------------------------
+
+  RAGDataSyncCodeBuild:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: !Sub "RAG-Data-Sync-Build-${KBIdValue}"
+      ServiceRole: !GetAtt CodeBuildServiceRole.Arn
+      Artifacts:
+        Type: NO_ARTIFACTS
+      Environment:
+        Type: LINUX_CONTAINER
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: aws/codebuild/standard:7.0
+      Source:
+        Type: CODEPIPELINE
+      BuildSpec: !Sub |
+        version: 0.2
+        phases:
+          pre_build:
+            commands:
+              - RAG_S3_BUCKET_NAME="${!FindInMap [ImportValues, S3Bucket, Value]}"
+          build:
+            commands:
+              - aws s3 sync --delete --exact-timestamps rag_documents/ s3://${RAG_S3_BUCKET_NAME}/rag_documents/
+          post_build:
+            commands:
+              - echo "Đồng bộ tài liệu RAG hoàn tất."
+
+  RAGDataIngestionPipeline:
+    Type: AWS::CodePipeline::Pipeline
+    Properties:
+      Name: !Sub "RAG-Data-Ingestion-Pipeline-${KBIdValue}"
+      RoleArn: !GetAtt CodeBuildServiceRole.Arn # CodePipeline sử dụng chung Role với CodeBuild
+      ArtifactStore:
+        Type: S3
+        Location: !Sub "codepipeline-${AWS::Region}-${AWS::AccountId}-artifacts"
+      Stages:
+        - Name: Source
+          Actions:
+            - Name: Source
+              ActionTypeId: {Category: Source, Owner: ThirdParty, Provider: GitHub, Version: '1'}
+              OutputArtifacts: [{Name: SourceArtifact}]
+              Configuration: {Owner: !Ref SourceRepoOwner, Repo: !Ref SourceRepoName, Branch: !Ref SourceRepoBranch, OAuthToken: !Ref GitHubToken, PollForSourceChanges: 'false'}
+        - Name: Build
+          Actions:
+            - Name: DataSyncBuild
+              InputArtifacts: [{Name: SourceArtifact}]
+              ActionTypeId: {Category: Build, Owner: AWS, Provider: CodeBuild, Version: '1'}
+              Configuration: {ProjectName: !Ref RAGDataSyncCodeBuild}
+
+# =================================================================
+# OUTPUTS (Export cho Pipeline 1 tham chiếu)
+# =================================================================
+Outputs:
+  AgentRuntimeRoleArn:
+    Value: !GetAtt AgentRuntimeRole.Arn
+    Export: { Name: !Sub "${BaseStackProjectName}-AgentRuntimeRoleArn" }
+  
+  CodeBuildServiceRoleArn:
+    Value: !GetAtt CodeBuildServiceRole.Arn
+    Export: { Name: !Sub "${BaseStackProjectName}-CodeBuildServiceRoleArn" }
+
+# =================================================================
+# aws cloudformation create-stack \
+#   --stack-name RAG-Data-Ingestion-Pipeline-Stack \
+#   --template-body file://rag-pipeline.yml \
+#   --parameters file://rag-pipeline-params.json \
+#   --capabilities CAPABILITY_NAMED_IAM \
+#   --region <REGION_CỦA_BẠN>

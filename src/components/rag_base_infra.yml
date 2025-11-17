@@ -1,0 +1,216 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: |
+  CloudFormation template to deploy the core RAG infrastructure: 
+  S3 Bucket, OpenSearch Serverless Collection/Index, and Bedrock Knowledge Base.
+
+# =================================================================
+# PARAMETERS - Cần cung cấp khi triển khai Stack này
+# =================================================================
+Parameters:
+  ProjectName:
+    Type: String
+    Default: RAG-System
+    Description: Tên cơ sở cho tất cả các tài nguyên.
+  
+  EmbeddingModelArn:
+    Type: String
+    Default: arn:aws:bedrock:us-east-1::foundation-model/amazon.titan-embed-text-v1 
+    # Thay đổi Region nếu cần. Ví dụ: us-east-1 cho Titan Embed
+    Description: ARN của Foundation Model dùng để tạo Embeddings.
+  
+  VectorStoreIndexName:
+    Type: String
+    Default: rag-vector-index
+    Description: Tên của Index (Bảng) trong OpenSearch.
+    
+  S3BucketNamePrefix:
+    Type: String
+    Default: rag-documents-store
+    Description: Tiền tố tên S3 Bucket (tên Bucket phải là duy nhất trên toàn cầu).
+
+# =================================================================
+# RESOURCES
+# =================================================================
+Resources:
+  
+  # -----------------------------------------------------------------
+  # 1. S3 BUCKET (Nơi lưu trữ tài liệu RAG)
+  # -----------------------------------------------------------------
+  RAGDocumentsS3Bucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "${S3BucketNamePrefix}-${AWS::AccountId}-${AWS::Region}"
+      VersioningConfiguration:
+        Status: Enabled
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-RAG-Source-Documents"
+
+  # -----------------------------------------------------------------
+  # 2. OPENSEARCH SERVERLESS (Vector Store)
+  # Lưu ý: Việc tạo OpenSearch Serverless cần vài bước (Collection, Policy, Data Access)
+  # -----------------------------------------------------------------
+  
+  # A. OpenSearch Collection (Nhóm tài nguyên OpenSearch Serverless)
+  OpenSearchCollection:
+    Type: AWS::OpenSearchServerless::Collection
+    Properties:
+      Name: !Sub "${ProjectName}-RAG-Collection"
+      Type: VECTORSEARCH
+      Description: Vector store collection for Bedrock Knowledge Base.
+  
+  # B. Network Policy (Cho phép truy cập)
+  # Giả định triển khai trong VPC, cần Network Policy để truy cập
+  OpenSearchNetworkPolicy:
+    Type: AWS::OpenSearchServerless::VpcEndpoint
+    Properties:
+      Name: !Sub "${ProjectName}-Network-Policy"
+      Description: Network policy for the collection.
+      # Lưu ý: Cần thêm Network Policy hợp lệ nếu không triển khai trong VPC
+  
+  # C. Data Access Policy (Chính sách truy cập dữ liệu)
+  # Cấp quyền cho Knowledge Base Role để truy cập OpenSearch
+  OpenSearchDataAccessPolicy:
+    Type: AWS::OpenSearchServerless::AccessPolicy
+    Properties:
+      Name: !Sub "${ProjectName}-DataAccess-Policy"
+      Type: data
+      Policy: !Sub |
+        [
+          {
+            "Rules": [
+              {
+                "ResourceType": "index",
+                "ResourceNames": ["${VectorStoreIndexName}"],
+                "Permission": [
+                  "aoss:CreateIndex",
+                  "aoss:DescribeIndex",
+                  "aoss:UpdateIndex",
+                  "aoss:DeleteIndex",
+                  "aoss:ReadDocument",
+                  "aoss:WriteDocument"
+                ]
+              },
+              {
+                "ResourceType": "collection",
+                "ResourceNames": ["${OpenSearchCollection.Name}"],
+                "Permission": [
+                  "aoss:DescribeCollection"
+                ]
+              }
+            ],
+            "Principal": ["${KnowledgeBaseServiceRole.Arn}"]
+          }
+        ]
+    DependsOn: KnowledgeBaseServiceRole # Đảm bảo Role tồn tại trước khi cấp quyền
+
+  # -----------------------------------------------------------------
+  # 3. IAM Role cho Knowledge Base (Dùng cho Bedrock Service)
+  # -----------------------------------------------------------------
+  KnowledgeBaseServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          # Cho phép Bedrock Assume Role
+          - Effect: Allow
+            Principal: { Service: bedrock.amazonaws.com }
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: KnowledgeBasePermissions
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              # Quyền đọc S3 Source
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:ListBucket
+                Resource:
+                  - !GetAtt RAGDocumentsS3Bucket.Arn
+                  - !Sub "${RAGDocumentsS3Bucket.Arn}/*"
+              # Quyền tương tác với OpenSearch
+              - Effect: Allow
+                Action:
+                  - "aoss:APIAccessAll" 
+                Resource: !GetAtt OpenSearchCollection.Arn
+              # Quyền tạo Log Group (để theo dõi indexing)
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: arn:aws:logs:*:*:*
+
+  # -----------------------------------------------------------------
+  # 4. BEDROCK KNOWLEDGE BASE
+  # -----------------------------------------------------------------
+  RAGKnowledgeBase:
+    Type: AWS::Bedrock::KnowledgeBase
+    Properties:
+      Name: !Sub "${ProjectName}-KB-${AWS::StackName}"
+      Description: Knowledge Base for RAG documents ingestion.
+      RoleArn: !GetAtt KnowledgeBaseServiceRole.Arn
+      KnowledgeBaseConfiguration:
+        Type: AMAZON_KNOWLEDGE_BASE
+        FoundationModelArn: !Ref EmbeddingModelArn
+      
+      StorageConfiguration:
+        Type: OPENSEARCH_SERVERLESS_VEC
+        VectorKnowledgeBaseConfiguration:
+          EmbeddingModelArn: !Ref EmbeddingModelArn
+        OpenSearchServerlessConfiguration:
+          CollectionArn: !GetAtt OpenSearchCollection.Arn
+          VectorField: "bedrock-vector" # Tên trường vector mặc định của Bedrock
+          TextField: "text"
+          IndexName: !Ref VectorStoreIndexName
+    DependsOn: OpenSearchDataAccessPolicy # Đảm bảo KB được tạo sau khi truy cập OpenSearch được cấp
+
+  # -----------------------------------------------------------------
+  # 5. DATA SOURCE (Kết nối S3 với KB)
+  # -----------------------------------------------------------------
+  RAGKnowledgeBaseDataSource:
+    Type: AWS::Bedrock::DataSource
+    Properties:
+      Name: "RAG-Document-Data-Source"
+      KnowledgeBaseId: !Ref RAGKnowledgeBase
+      DataSourceConfiguration:
+        Type: S3
+        S3Configuration:
+          BucketArn: !GetAtt RAGDocumentsS3Bucket.Arn
+          InclusionPrefixes: # Chỉ định rõ tiền tố nếu cần, ví dụ: 'rag_documents/'
+            - rag_documents/ 
+    # DependsOn: RAGKnowledgeBase # Mối quan hệ này là ngầm định
+
+# =================================================================
+# OUTPUTS (Để Stack Pipeline tham chiếu chéo)
+# =================================================================
+Outputs:
+  RAGDocumentsS3BucketName:
+    Description: Name of the S3 Bucket for RAG documents.
+    Value: !Ref RAGDocumentsS3Bucket
+    Export:
+      Name: !Sub "${ProjectName}-RAGDocumentsS3BucketName"
+      
+  KnowledgeBaseId:
+    Description: ID of the created Bedrock Knowledge Base.
+    Value: !Ref RAGKnowledgeBase
+    Export:
+      Name: !Sub "${ProjectName}-KnowledgeBaseId"
+
+  KnowledgeBaseDataSourceId:
+    Description: ID of the created Bedrock Knowledge Base Data Source.
+    Value: !Ref RAGKnowledgeBaseDataSource
+    Export:
+      Name: !Sub "${ProjectName}-KnowledgeBaseDataSourceId"
+
+  OpenSearchCollectionArn:
+    Description: ARN of the OpenSearch Serverless Collection.
+    Value: !GetAtt OpenSearchCollection.Arn
+    Export:
+      Name: !Sub "${ProjectName}-OpenSearchCollectionArn"
