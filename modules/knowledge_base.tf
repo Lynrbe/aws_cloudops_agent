@@ -41,23 +41,28 @@ resource "aws_iam_role_policy" "kb_policy" {
 }
 
 # Bedrock Knowledge Base
-resource "aws_bedrock_knowledge_base" "kb" {
+resource "aws_bedrockagent_knowledge_base" "kb" {
   name        = "${var.project}-kb"
   description = "Knowledge Base for RAG"
   role_arn    = aws_iam_role.kb_service_role.arn
 
   knowledge_base_configuration {
-    type = "AMAZON_KNOWLEDGE_BASE"
-    foundation_model_arn = "arn:aws:bedrock:${var.region}::foundation-model/amazon.titan-embed-text-v1"
+    type = "VECTOR"
+    vector_knowledge_base_configuration {
+      embedding_model_arn = "arn:aws:bedrock:${var.region}::foundation-model/amazon.titan-embed-text-v2:0"
+    }
   }
 
   storage_configuration {
     type = "OPENSEARCH_SERVERLESS"
     opensearch_serverless_configuration {
-      collection_arn = aws_opensearchserverless_collection.rag_collection.arn
-      vector_field   = "vector"
-      text_field     = "text"
-      index_name     = "rag-agent-index"
+      collection_arn    = aws_opensearchserverless_collection.rag_collection.arn
+      vector_index_name = "rag-agent-index"
+      field_mapping {
+        vector_field   = "vector"
+        text_field     = "text"
+        metadata_field = "metadata"
+      }
     }
   }
 }
@@ -65,7 +70,7 @@ resource "aws_bedrock_knowledge_base" "kb" {
 # Data Source (Kết nối S3 Documents với KB)
 resource "aws_bedrockagent_data_source" "docs_data_source" {
   name               = "docs-data-source"
-  knowledge_base_id  = aws_bedrock_knowledge_base.kb.id
+  knowledge_base_id  = aws_bedrockagent_knowledge_base.kb.id
   data_source_configuration {
     type = "S3"
     s3_configuration {
