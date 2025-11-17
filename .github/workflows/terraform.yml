@@ -7,6 +7,9 @@ on:
   workflow_run:
     workflows: ["CI - Build Lambda & Upload Artifacts"]
     types: [completed]
+    branches:
+      # - main
+      - feature/rag_pipeline
 
 env:
   # Lấy SHA từ trigger của workflow_run hoặc từ workflow_dispatch
