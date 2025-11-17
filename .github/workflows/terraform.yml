@@ -15,7 +15,7 @@ env:
   # Lấy SHA từ trigger của workflow_run hoặc từ workflow_dispatch
   COMMIT_SHA: ${{ github.event.workflow_run.head_sha || github.sha }} 
   # Lấy Bucket Artifact từ Secrets
-  ARTIFACT_BUCKET: ${{ secrets.ARTIFACT_BUCKET }} 
+  ARTIFACT_BUCKET: ${{ vars.ARTIFACT_BUCKET }} 
 
 jobs:
   deploy:
