@@ -2,60 +2,62 @@ name: CD - Terraform Apply
 
 on:
   workflow_dispatch: 
-  
   workflow_run:
-    # Tên của workflow CI
     workflows: ["CI - Build Lambda & Upload Artifacts"] 
     types: [completed]
     branches:
       - main
-      - feature/rag_pipeline
+      # Thêm các nhánh feature nếu cần
+      - feature/rag_pipeline 
 
 env:
-  # Lấy SHA từ trigger của workflow_run hoặc từ workflow_dispatch
+  # Lấy SHA
   COMMIT_SHA: ${{ github.event.workflow_run.head_sha || github.sha }} 
-  # Lấy Bucket Artifact từ Secrets
+  # Lấy Bucket Artifact từ Secrets (Đã chuyển về Secrets)
   ARTIFACT_BUCKET: ${{ secrets.ARTIFACT_BUCKET }} 
 
 jobs:
   deploy:
-    # Chỉ chạy nếu workflow_run thành công
     if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
 
     steps:
     - uses: actions/checkout@v3
 
-    # Cấu hình AWS CLI
+    # Cấu hình AWS
     - name: Configure AWS Credentials
       uses: aws-actions/configure-aws-credentials@v2
       with:
         aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        aws-region: ${{ vars.AWS_REGION }} # Sử dụng Vars
-    
-    # Cài đặt Terraform CLI
+        aws-region: ${{ vars.AWS_REGION }} 
+
+    # Cài đặt Terraform
     - name: Setup Terraform
       uses: hashicorp/setup-terraform@v2
-      with:
-        terraform_version: 1.5.0 # (Tùy chọn) Pin phiên bản
 
-    # 1. Terraform Init (Khởi tạo Backend S3)
+    # 1. Terraform Init (Sử dụng thư mục 'modules')
     - name: Terraform Init
+      # SỬA THÀNH 'modules'
       run: terraform -chdir=modules init -backend-config="bucket=${{ secrets.TF_STATE_BUCKET }}"
       env:
         AWS_REGION: ${{ vars.AWS_REGION }}
 
-    # 2. Terraform Validate & Plan (Kiểm tra)
+    # 2. Terraform Plan (THÊM CÁC BIẾN -var VÀ SỬA THÀNH 'modules')
     - name: Terraform Plan
-      run: terraform -chdir=modules plan
-      
-    # 3. Terraform Apply
-    - name: Terraform Apply
       run: |
-        terraform -chdir=modules apply -auto-approve \
+        # SỬA THÀNH 'modules' VÀ THÊM -var
+        terraform -chdir=modules plan -out=tfplan \
           -var "ingest_artifact_key=ingest-${{ env.COMMIT_SHA }}.zip" \
           -var "retrieve_artifact_key=retrieve-${{ env.COMMIT_SHA }}.zip" \
           -var "artifact_bucket_name=${{ env.ARTIFACT_BUCKET }}"
+      env:
+        AWS_REGION: ${{ vars.AWS_REGION }}
+
+    # 3. Terraform Apply (SỬA THÀNH 'modules')
+    - name: Terraform Apply
+      run: |
+        # SỬA THÀNH 'modules'
+        terraform -chdir=modules apply -auto-approve tfplan
       env:
         AWS_REGION: ${{ vars.AWS_REGION }}
