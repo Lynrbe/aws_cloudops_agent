@@ -45,11 +45,11 @@ jobs:
         aws s3 cp assets/retrieve_lambda/retrieve.zip \
           s3://${{ vars.ARTIFACT_BUCKET }}/retrieve-${{ github.sha }}.zip
 
-    # 3. Chuyển tiếp sang CD Terraform
-    - name: Trigger CD Pipeline
-      uses: benc-uk/workflow-dispatch@v1
-      with:
-        workflow: CD - Terraform Apply
-        token: ${{ secrets.PAT_TOKEN }} # Cần PAT để trigger workflow_run
-        ref: ${{ github.ref }}
-        inputs: '{"commit_sha": "${{ github.sha }}"}'
+    # # 3. Chuyển tiếp sang CD Terraform
+    # - name: Trigger CD Pipeline
+    #   uses: benc-uk/workflow-dispatch@v1
+    #   with:
+    #     workflow: CD - Terraform Apply
+    #     token: ${{ secrets.PAT_TOKEN }} # Cần PAT để trigger workflow_run
+    #     ref: ${{ github.ref }}
+    #     inputs: '{"commit_sha": "${{ github.sha }}"}'
