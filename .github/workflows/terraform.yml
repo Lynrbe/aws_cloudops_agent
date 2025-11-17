@@ -15,7 +15,7 @@ env:
   # Lấy SHA từ trigger của workflow_run hoặc từ workflow_dispatch
   COMMIT_SHA: ${{ github.event.workflow_run.head_sha || github.sha }} 
   # Lấy Bucket Artifact từ Secrets
-  ARTIFACT_BUCKET: ${{ vars.ARTIFACT_BUCKET }} 
+  ARTIFACT_BUCKET: ${{ secrets.ARTIFACT_BUCKET }} 
 
 jobs:
   deploy:
@@ -42,7 +42,7 @@ jobs:
 
     # 1. Terraform Init (Khởi tạo Backend S3)
     - name: Terraform Init
-      run: terraform -chdir=infra init -backend-config="bucket=${{ secrets.TF_STATE_BUCKET }}"
+      run: terraform -chdir=modules init -backend-config="bucket=${{ secrets.TF_STATE_BUCKET }}"
       env:
         AWS_REGION: ${{ vars.AWS_REGION }}
 
