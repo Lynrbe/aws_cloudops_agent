@@ -1,14 +1,14 @@
 name: CD - Terraform Apply
 
 on:
-  workflow_dispatch: # Cho phép chạy thủ công
+  workflow_dispatch: 
   
-  # Trigger sau khi CI build thành công
   workflow_run:
-    workflows: ["CI - Build Lambda & Upload Artifacts"]
+    # Tên của workflow CI
+    workflows: ["CI - Build Lambda & Upload Artifacts"] 
     types: [completed]
     branches:
-      # - main
+      - main
       - feature/rag_pipeline
 
 env:
