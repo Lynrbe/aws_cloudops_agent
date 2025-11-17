@@ -15,5 +15,5 @@ output "artifacts_bucket_name" {
 
 output "knowledge_base_id" {
   description = "ID của Bedrock Knowledge Base đã tạo."
-  value       = aws_bedrock_knowledge_base.kb.id
+  value       = aws_bedrockagent_knowledge_base.kb.id
 }
