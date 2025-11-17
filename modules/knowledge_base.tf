@@ -41,7 +41,7 @@ resource "aws_iam_role_policy" "kb_policy" {
 }
 
 # Bedrock Knowledge Base
-resource "aws_bedrockknowledgebase" "kb" {
+resource "aws_bedrock_knowledge_base" "kb" {
   name        = "${var.project}-kb"
   description = "Knowledge Base for RAG"
   role_arn    = aws_iam_role.kb_service_role.arn
@@ -63,7 +63,7 @@ resource "aws_bedrockknowledgebase" "kb" {
 }
 
 # Data Source (Kết nối S3 Documents với KB)
-resource "aws_bedrock_data_source" "docs_data_source" {
+resource "aws_bedrockagent_data_source" "docs_data_source" {
   name               = "docs-data-source"
   knowledge_base_id  = aws_bedrock_knowledge_base.kb.id
   data_source_configuration {
