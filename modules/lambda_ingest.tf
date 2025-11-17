@@ -14,7 +14,7 @@ resource "aws_lambda_function" "ingest" {
 
   environment {
     variables = {
-      KNOWLEDGE_BASE_ID = aws_bedrock_knowledge_base.kb.id
+      KNOWLEDGE_BASE_ID = aws_bedrockagent_knowledge_base.kb.id
       REGION = var.region
     }
   }
