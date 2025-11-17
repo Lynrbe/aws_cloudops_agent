@@ -1,0 +1,55 @@
+name: CI - Build Lambda & Upload Artifacts
+
+on:
+  push:
+    branches: ["feature/rag_pipeline"]
+  workflow_dispatch: # Cho phép chạy thủ công
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+
+    # Cấu hình AWS CLI
+    - name: Configure AWS Credentials
+      uses: aws-actions/configure-aws-credentials@v2
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ vars.AWS_REGION }} # Sử dụng Vars thay vì hardcode
+
+    # 1. Build & đóng gói Lambda Ingest
+    - name: Build ingest lambda
+      run: |
+        cd src/ingest_lambda
+        # Cài đặt dependency vào thư mục gốc của code
+        pip install -r requirements.txt -t .
+        zip -r ingest.zip .
+        cd ../../
+    - name: Upload ingest artifact
+      run: |
+        aws s3 cp src/ingest_lambda/ingest.zip \
+          s3://${{ vars.ARTIFACT_BUCKET }}/ingest-${{ github.sha }}.zip
+
+    # 2. Build & đóng gói Lambda Retrieve
+    - name: Build retrieve lambda
+      run: |
+        cd src/retrieve_lambda
+        pip install -r requirements.txt -t .
+        zip -r retrieve.zip .
+        cd ../../
+    - name: Upload retrieve artifact
+      run: |
+        aws s3 cp src/retrieve_lambda/retrieve.zip \
+          s3://${{ vars.ARTIFACT_BUCKET }}/retrieve-${{ github.sha }}.zip
+
+    # 3. Chuyển tiếp sang CD Terraform
+    - name: Trigger CD Pipeline
+      uses: benc-uk/workflow-dispatch@v1
+      with:
+        workflow: CD - Terraform Apply
+        token: ${{ secrets.PAT_TOKEN }} # Cần PAT để trigger workflow_run
+        ref: ${{ github.ref }}
+        inputs: '{"commit_sha": "${{ github.sha }}"}'
