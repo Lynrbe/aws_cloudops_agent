@@ -170,11 +170,55 @@ Resources:
                   - logs:CreateLogStream
                   - logs:PutLogEvents
                 Resource: arn:aws:logs:*:*:*
+              - Effect: Allow
+                Action:
+                  - bedrock:InvokeModel
+                Resource: !Ref EmbeddingModelArn
 
   # -----------------------------------------------------------------
   # 4. BEDROCK KNOWLEDGE BASE & DATA SOURCE
-  # NOTE: These will be created manually via AWS CLI
   # -----------------------------------------------------------------
+  BedrockKnowledgeBase:
+    Type: AWS::Bedrock::KnowledgeBase
+    Properties:
+      Name: !Sub "${ProjectName}-KnowledgeBase"
+      Description: !Sub "Knowledge Base for ${ProjectName} RAG System"
+      RoleArn: !GetAtt KnowledgeBaseServiceRole.Arn
+      KnowledgeBaseConfiguration:
+        Type: VECTOR
+        VectorKnowledgeBaseConfiguration:
+          EmbeddingModelArn: !Ref EmbeddingModelArn
+      StorageConfiguration:
+        Type: OPENSEARCH_SERVERLESS
+        OpensearchServerlessConfiguration:
+          CollectionArn: !GetAtt OpenSearchCollection.Arn
+          VectorIndexName: !Ref VectorStoreIndexName
+          FieldMapping:
+            VectorField: vector
+            TextField: text
+            MetadataField: metadata
+    DependsOn:
+      - OpenSearchDataAccessPolicy
+      - KnowledgeBaseServiceRole
+
+  BedrockDataSource:
+    Type: AWS::Bedrock::DataSource
+    Properties:
+      Name: !Sub "${ProjectName}-S3DataSource"
+      Description: !Sub "S3 Data Source for ${ProjectName} Knowledge Base"
+      KnowledgeBaseId: !Ref BedrockKnowledgeBase
+      DataSourceConfiguration:
+        Type: S3
+        S3Configuration:
+          BucketArn: !GetAtt RAGDocumentsS3Bucket.Arn
+      VectorIngestionConfiguration:
+        ChunkingConfiguration:
+          ChunkingStrategy: FIXED_SIZE
+          FixedSizeChunkingConfiguration:
+            MaxTokens: 512
+            OverlapPercentage: 20
+    DependsOn:
+      - BedrockKnowledgeBase
 
 # =================================================================
 # OUTPUTS - For cross-stack references and manual KB creation
@@ -215,3 +259,21 @@ Outputs:
     Value: !Ref VectorStoreIndexName
     Export:
       Name: !Sub "${ProjectName}-VectorIndexName"
+
+  KnowledgeBaseId:
+    Description: Bedrock Knowledge Base ID
+    Value: !Ref BedrockKnowledgeBase
+    Export:
+      Name: !Sub "${ProjectName}-KnowledgeBaseId"
+
+  KnowledgeBaseArn:
+    Description: Bedrock Knowledge Base ARN
+    Value: !GetAtt BedrockKnowledgeBase.KnowledgeBaseArn
+    Export:
+      Name: !Sub "${ProjectName}-KnowledgeBaseArn"
+
+  DataSourceId:
+    Description: Bedrock Data Source ID
+    Value: !Ref BedrockDataSource
+    Export:
+      Name: !Sub "${ProjectName}-DataSourceId"
