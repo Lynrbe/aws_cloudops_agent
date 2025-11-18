@@ -34,12 +34,6 @@ resource "aws_opensearchserverless_security_policy" "network_policy" {
 resource "aws_opensearchserverless_collection" "rag_collection" {
   name = "${var.project}-kb-collection" # Tên này phải khớp với policy
   type = "VECTORSEARCH"
-  
-  # BẮT BUỘC THÊM depends_on
-  depends_on = [
-    aws_opensearchserverless_security_policy.encryption_policy,
-    aws_opensearchserverless_security_policy.network_policy
-  ]
 }
 
 # Access Policy cho Bedrock Knowledge Base Role (Sẽ cần tạo Role KB riêng biệt)
