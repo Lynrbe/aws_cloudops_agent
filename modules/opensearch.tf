@@ -46,38 +46,29 @@ resource "aws_opensearchserverless_collection" "rag_collection" {
 resource "aws_opensearchserverless_access_policy" "rag_data_access" {
   name = "${var.project}-kb-access"
   type = "data"
-
-  policy = jsonencode([
-    {
-      Rules = [
-        {
-          ResourceType = "index"
-          Resource     = ["index/${lower(var.project)}-kb-collection/*"]
-          Permission = [
-            "aoss:CreateIndex",
-            "aoss:DescribeIndex",
-            "aoss:UpdateIndex",
-            "aoss:DeleteIndex",
-            "aoss:ReadDocument",
-            "aoss:WriteDocument"
-          ]
-        },
-        {
-          ResourceType = "collection"
-          Resource     = ["collection/${lower(var.project)}-kb-collection"]
-          Permission = [
-            "aoss:CreateCollectionItems",
-            "aoss:UpdateCollectionItems",
-            "aoss:DescribeCollectionItems"
-          ]
-        }
-      ]
-      Principal = [aws_iam_role.lambda_exec.arn]
-    }
-  ])
+  
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Principal = [
+          aws_iam_role.kb_service_role.arn,
+          data.aws_caller_identity.current.arn
+        ]
+        Action = [
+          "aoss:*" 
+        ]
+        Resource = [
+          aws_opensearchserverless_collection.rag_collection.arn,
+          "${aws_opensearchserverless_collection.rag_collection.arn}/*"
+        ]
+      },
+    ]
+  })
 
   depends_on = [
-    aws_iam_role.lambda_exec,
-    aws_opensearchserverless_collection.rag_collection
+    aws_opensearchserverless_collection.rag_collection,
+    aws_iam_role.kb_service_role
   ]
 }

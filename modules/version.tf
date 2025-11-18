@@ -1,3 +1,5 @@
+data "aws_caller_identity" "current" {}
+
 terraform {
   required_providers {
     aws = {
@@ -18,3 +20,4 @@ terraform {
 provider "aws" {
   region = var.region
 }
+
