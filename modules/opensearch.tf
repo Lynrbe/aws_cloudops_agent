@@ -1,5 +1,5 @@
 resource "aws_opensearchserverless_security_policy" "encryption_policy" {
-  name = "${var.project}-kb-encryption-policy"
+  name = "${var.project}-encrypt-policy"
   type = "encryption"
   
   # Using key default of AWS (AWSOwnedKey)
@@ -15,7 +15,7 @@ resource "aws_opensearchserverless_security_policy" "encryption_policy" {
 }
 
 resource "aws_opensearchserverless_security_policy" "network_policy" {
-  name = "${var.project}-kb-network-policy"
+  name = "${var.project}-network-policy"
   type = "network"
   
   policy = jsonencode([
