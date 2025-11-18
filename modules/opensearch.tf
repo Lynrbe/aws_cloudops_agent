@@ -1,7 +1,45 @@
+resource "aws_opensearchserverless_security_policy" "encryption_policy" {
+  name = "${var.project}-kb-encryption-policy"
+  type = "encryption"
+  
+  policy = jsonencode({
+    "Rules" : [
+      {
+        "ResourceType" : "collection",
+        "Resource" : ["collection/${aws_opensearchserverless_collection.rag_collection.name}"]
+      }
+    ],
+    "AWSOwnedKey" : true 
+  })
+}
+
+resource "aws_opensearchserverless_security_policy" "network_policy" {
+  name = "${var.project}-kb-network-policy"
+  type = "network"
+  
+  policy = jsonencode([
+    {
+      "Rules" : [
+        {
+          "ResourceType" : "collection",
+          "Resource" : ["collection/${aws_opensearchserverless_collection.rag_collection.name}"]
+        }
+      ],
+      "AllowFromPublic" : true 
+    }
+  ])
+}
+
 # OpenSearch Serverless Collection
 resource "aws_opensearchserverless_collection" "rag_collection" {
-  name = "${var.project}-kb-collection"
+  name = "${var.project}-kb-collection" # Tên này phải khớp với policy
   type = "VECTORSEARCH"
+  
+  # BẮT BUỘC THÊM depends_on
+  depends_on = [
+    aws_opensearchserverless_security_policy.encryption_policy,
+    aws_opensearchserverless_security_policy.network_policy
+  ]
 }
 
 # Access Policy cho Bedrock Knowledge Base Role (Sẽ cần tạo Role KB riêng biệt)
