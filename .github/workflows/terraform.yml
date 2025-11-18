@@ -50,8 +50,8 @@ jobs:
         terraform -chdir=modules plan -out=tfplan \
           -var "ingest_artifact_key=ingest-${{ env.COMMIT_SHA }}.zip" \
           -var "retrieve_artifact_key=retrieve-${{ env.COMMIT_SHA }}.zip" \
-          -var "artifact_bucket_name=${{ env.ARTIFACT_BUCKET }}" \
-          -
+          -var "artifact_bucket_name=${{ env.ARTIFACT_BUCKET }}" 
+          
       env:
         AWS_REGION: ${{ vars.AWS_REGION }}
 
