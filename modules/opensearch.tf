@@ -32,11 +32,11 @@ resource "aws_opensearchserverless_security_policy" "network_policy" {
 
 # OpenSearch Serverless Collection
 resource "aws_opensearchserverless_collection" "rag_collection" {
-  name = "${var.project}-kb-collection" # Tên này phải khớp với policy
+  name = "${var.project}-kb-collection" 
   type = "VECTORSEARCH"
 }
 
-# Access Policy cho Bedrock Knowledge Base Role (Sẽ cần tạo Role KB riêng biệt)
+# Access Policy for Bedrock Knowledge Base Role 
 resource "aws_opensearchserverless_access_policy" "rag_data_access" {
   name = "${var.project}-kb-access"
   type = "data"
