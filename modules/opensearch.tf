@@ -72,12 +72,12 @@ resource "aws_opensearchserverless_access_policy" "rag_data_access" {
           ]
         }
       ]
-      Principal = [aws_iam_role.knowledge_base.arn]
+      Principal = [aws_iam_role.lambda_exec.arn]
     }
   ])
 
   depends_on = [
-    aws_iam_role.knowledge_base,
-    aws_opensearchserverless_collection.rag
+    aws_iam_role.lambda_exec,
+    aws_opensearchserverless_collection.rag_collection
   ]
 }
