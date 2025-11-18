@@ -75,7 +75,6 @@ resource "aws_bedrockagent_data_source" "docs_data_source" {
     type = "S3"
     s3_configuration {
       bucket_arn = aws_s3_bucket.rag_documents.arn
-      # Giả định documents nằm trong thư mục 'docs/'
       inclusion_prefixes = ["docs/"] 
     }
   }

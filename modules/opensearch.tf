@@ -3,7 +3,8 @@ resource "aws_opensearchserverless_security_policy" "encryption_policy" {
   type = "encryption"
   
   # Using key default of AWS (AWSOwnedKey)
-  policy = jsonencode({
+  policy = jsonencode([
+    {
     "Rules" : [
       {
         "ResourceType" : "collection",
@@ -11,7 +12,8 @@ resource "aws_opensearchserverless_security_policy" "encryption_policy" {
       }
     ],
     "AWSOwnedKey" : true 
-  })
+    }
+  ])
 }
 
 resource "aws_opensearchserverless_security_policy" "network_policy" {
