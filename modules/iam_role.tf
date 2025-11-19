@@ -42,9 +42,9 @@ resource "aws_iam_role_policy" "lambda_policy" {
           "s3:PutObject",
         ]
         Resource = [
-          "${aws_s3_bucket.rag_artifacts.arn}/*",
+          "${data.aws_s3_bucket.rag_artifacts.arn}/*",
           "${aws_s3_bucket.rag_documents.arn}/*",
-          aws_s3_bucket.rag_artifacts.arn,
+          data.aws_s3_bucket.rag_artifacts.arn,
           aws_s3_bucket.rag_documents.arn,
         ]
       },
