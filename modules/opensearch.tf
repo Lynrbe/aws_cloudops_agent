@@ -71,7 +71,7 @@ resource "aws_opensearchserverless_access_policy" "rag_data_access" {
       ]
       Principal = [
         aws_iam_role.kb_service_role.arn,
-        "arn:aws:iam::${data.aws_caller_identity.current.account_id}:*"
+        "arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"
       ]
     }
   ])
