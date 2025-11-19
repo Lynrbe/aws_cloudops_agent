@@ -65,6 +65,10 @@ resource "aws_bedrockagent_knowledge_base" "kb" {
       }
     }
   }
+
+  depends_on = [
+    null_resource.create_index
+  ]
 }
 
 # Data Source (Kết nối S3 Documents với KB)

@@ -35,40 +35,120 @@ resource "aws_opensearchserverless_security_policy" "network_policy" {
 resource "aws_opensearchserverless_collection" "rag_collection" {
   name = "${var.project}-kb-collection"
   type = "VECTORSEARCH"
-  
+
   depends_on = [
     aws_opensearchserverless_security_policy.encryption_policy,
     aws_opensearchserverless_security_policy.network_policy
   ]
 }
 
-# 4. Access Policy 
+# 4. Access Policy
 resource "aws_opensearchserverless_access_policy" "rag_data_access" {
   name = "${var.project}-kb-access"
   type = "data"
-  
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Principal = [
-          aws_iam_role.kb_service_role.arn,
-          data.aws_caller_identity.current.arn
-        ]
-        Action = [
-          "aoss:*" 
-        ]
-        Resource = [
-          aws_opensearchserverless_collection.rag_collection.arn,
-          "${aws_opensearchserverless_collection.rag_collection.arn}/*"
-        ]
-      },
-    ]
-  })
+
+  policy = jsonencode([
+    {
+      Rules = [
+        {
+          Resource = [
+            "collection/${var.project}-kb-collection"
+          ]
+          Permission = [
+            "aoss:*"
+          ]
+          ResourceType = "collection"
+        },
+        {
+          Resource = [
+            "index/${var.project}-kb-collection/*"
+          ]
+          Permission = [
+            "aoss:*"
+          ]
+          ResourceType = "index"
+        }
+      ]
+      Principal = [
+        aws_iam_role.kb_service_role.arn,
+        data.aws_caller_identity.current.arn
+      ]
+    }
+  ])
 
   depends_on = [
     aws_opensearchserverless_collection.rag_collection,
     aws_iam_role.kb_service_role
+  ]
+}
+
+# 5. Create OpenSearch Index
+resource "null_resource" "create_index" {
+  provisioner "local-exec" {
+    command = <<-EOF
+      python3 -c "
+import boto3
+import time
+from opensearchpy import OpenSearch, RequestsHttpConnection, AWSV4SignerAuth
+
+# Wait for collection to be active
+time.sleep(30)
+
+region = '${var.region}'
+host = '${aws_opensearchserverless_collection.rag_collection.collection_endpoint}'
+host = host.replace('https://', '')
+
+credentials = boto3.Session().get_credentials()
+auth = AWSV4SignerAuth(credentials, region, 'aoss')
+
+client = OpenSearch(
+    hosts=[{'host': host, 'port': 443}],
+    http_auth=auth,
+    use_ssl=True,
+    verify_certs=True,
+    connection_class=RequestsHttpConnection,
+    timeout=300
+)
+
+index_name = 'rag-agent-index'
+index_body = {
+    'settings': {
+        'index': {
+            'knn': True,
+            'knn.algo_param.ef_search': 512
+        }
+    },
+    'mappings': {
+        'properties': {
+            'vector': {
+                'type': 'knn_vector',
+                'dimension': 1024,
+                'method': {
+                    'name': 'hnsw',
+                    'engine': 'faiss',
+                    'parameters': {
+                        'ef_construction': 512,
+                        'm': 16
+                    }
+                }
+            },
+            'text': {'type': 'text'},
+            'metadata': {'type': 'text'}
+        }
+    }
+}
+
+if not client.indices.exists(index=index_name):
+    client.indices.create(index=index_name, body=index_body)
+    print(f'Index {index_name} created')
+else:
+    print(f'Index {index_name} already exists')
+"
+    EOF
+  }
+
+  depends_on = [
+    aws_opensearchserverless_collection.rag_collection,
+    aws_opensearchserverless_access_policy.rag_data_access
   ]
 }
