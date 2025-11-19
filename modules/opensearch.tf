@@ -3,34 +3,30 @@ resource "aws_opensearchserverless_security_policy" "encryption_policy" {
   type = "encryption"
   
   # Using key default of AWS (AWSOwnedKey)
-  policy = jsonencode([
-    {
+  policy = jsonencode({
     "Rules" : [
       {
         "ResourceType" : "collection",
         "Resource" : ["collection/${var.project}-kb-collection"] #static name
       }
     ],
-    "AWSOwnedKey" : true 
-    }
-  ])
+    "AWSOwnedKey" : true
+  })
 }
 
 resource "aws_opensearchserverless_security_policy" "network_policy" {
   name = "${var.project}-network-policy"
   type = "network"
   
-  policy = jsonencode([
-    {
-      "Rules" : [
-        {
-          "ResourceType" : "collection",
-          "Resource" : ["collection/${var.project}-kb-collection"]
-        }
-      ],
-      "AllowFromPublic" : true 
-    }
-  ])
+  policy = jsonencode({
+    "Rules" : [
+      {
+        "ResourceType" : "collection",
+        "Resource" : ["collection/${var.project}-kb-collection"]
+      }
+    ],
+    "AllowFromPublic" : true
+  })
 }
 
 # 3. OpenSearch Serverless Collection
