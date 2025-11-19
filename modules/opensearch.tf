@@ -71,7 +71,7 @@ resource "aws_opensearchserverless_access_policy" "rag_data_access" {
       ]
       Principal = [
         aws_iam_role.kb_service_role.arn,
-        data.aws_caller_identity.current.arn
+        "arn:aws:iam::${data.aws_caller_identity.current.account_id}:*"
       ]
     }
   ])
@@ -91,8 +91,9 @@ resource "null_resource" "create_index" {
       # Install opensearch-py and dependencies
       pip3 install --quiet --user opensearch-py boto3 requests requests-aws4auth
 
-      # Wait for collection to be active
-      sleep 30
+      # Wait for collection and access policies to be active and propagated
+      echo "Waiting for OpenSearch collection and access policies to be fully active..."
+      sleep 60
 
       python3 << 'PYTHON_SCRIPT'
 import boto3
@@ -104,8 +105,14 @@ region = '${var.region}'
 host = '${aws_opensearchserverless_collection.rag_collection.collection_endpoint}'
 host = host.replace('https://', '')
 
+print(f"Connecting to OpenSearch at: {host}")
+
 # Get AWS credentials
 credentials = boto3.Session().get_credentials()
+sts_client = boto3.client('sts', region_name=region)
+caller_identity = sts_client.get_caller_identity()
+print(f"Caller Identity ARN: {caller_identity['Arn']}")
+
 awsauth = AWS4Auth(
     credentials.access_key,
     credentials.secret_key,
@@ -114,52 +121,68 @@ awsauth = AWS4Auth(
     session_token=credentials.token
 )
 
-client = OpenSearch(
-    hosts=[{'host': host, 'port': 443}],
-    http_auth=awsauth,
-    use_ssl=True,
-    verify_certs=True,
-    connection_class=RequestsHttpConnection,
-    timeout=300
-)
+# Retry logic for connection
+max_retries = 3
+retry_delay = 30
 
-index_name = 'rag-agent-index'
-index_body = {
-    'settings': {
-        'index': {
-            'knn': True,
-            'knn.algo_param.ef_search': 512
-        }
-    },
-    'mappings': {
-        'properties': {
-            'vector': {
-                'type': 'knn_vector',
-                'dimension': 1024,
-                'method': {
-                    'name': 'hnsw',
-                    'engine': 'faiss',
-                    'parameters': {
-                        'ef_construction': 512,
-                        'm': 16
-                    }
+for attempt in range(max_retries):
+    try:
+        client = OpenSearch(
+            hosts=[{'host': host, 'port': 443}],
+            http_auth=awsauth,
+            use_ssl=True,
+            verify_certs=True,
+            connection_class=RequestsHttpConnection,
+            timeout=300
+        )
+
+        index_name = 'rag-agent-index'
+
+        # Check if index exists
+        if client.indices.exists(index=index_name):
+            print(f'Index {index_name} already exists')
+            break
+
+        # Create index
+        index_body = {
+            'settings': {
+                'index': {
+                    'knn': True,
+                    'knn.algo_param.ef_search': 512
                 }
             },
-            'text': {'type': 'text'},
-            'metadata': {'type': 'text'}
+            'mappings': {
+                'properties': {
+                    'vector': {
+                        'type': 'knn_vector',
+                        'dimension': 1024,
+                        'method': {
+                            'name': 'hnsw',
+                            'engine': 'faiss',
+                            'parameters': {
+                                'ef_construction': 512,
+                                'm': 16
+                            }
+                        }
+                    },
+                    'text': {'type': 'text'},
+                    'metadata': {'type': 'text'}
+                }
+            }
         }
-    }
-}
 
-try:
-    if not client.indices.exists(index=index_name):
         client.indices.create(index=index_name, body=index_body)
         print(f'Index {index_name} created successfully')
-    else:
-        print(f'Index {index_name} already exists')
-except Exception as e:
-    print(f'Error: {str(e)}')
-    raise
+        break
+
+    except Exception as e:
+        if attempt < max_retries - 1:
+            print(f'Attempt {attempt + 1} failed: {str(e)}')
+            print(f'Waiting {retry_delay} seconds before retry...')
+            time.sleep(retry_delay)
+        else:
+            print(f'Error after {max_retries} attempts: {str(e)}')
+            raise
 PYTHON_SCRIPT
     EOF
   }
