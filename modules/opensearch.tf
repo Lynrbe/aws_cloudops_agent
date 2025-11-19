@@ -17,16 +17,18 @@ resource "aws_opensearchserverless_security_policy" "encryption_policy" {
 resource "aws_opensearchserverless_security_policy" "network_policy" {
   name = "${var.project}-network-policy"
   type = "network"
-  
-  policy = jsonencode({
-    "Rules" : [
-      {
-        "ResourceType" : "collection",
-        "Resource" : ["collection/${var.project}-kb-collection"]
-      }
-    ],
-    "AllowFromPublic" : true
-  })
+
+  policy = jsonencode([
+    {
+      "Rules" : [
+        {
+          "ResourceType" : "collection",
+          "Resource" : ["collection/${var.project}-kb-collection"]
+        }
+      ],
+      "AllowFromPublic" : true
+    }
+  ])
 }
 
 # 3. OpenSearch Serverless Collection
