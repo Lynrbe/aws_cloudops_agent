@@ -2,7 +2,7 @@ name: CI - Build Lambda & Upload Artifacts
 
 on:
   push:
-    branches: ["feature/main"]
+    branches: ["feature/feature/rag_pipeline"]
   workflow_dispatch: 
 
 jobs:

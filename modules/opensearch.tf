@@ -84,16 +84,22 @@ resource "aws_opensearchserverless_access_policy" "rag_data_access" {
 
 # 5. Create OpenSearch Index
 resource "null_resource" "create_index" {
+  triggers = {
+    collection_endpoint = aws_opensearchserverless_collection.rag_collection.collection_endpoint
+    access_policy_id    = aws_opensearchserverless_access_policy.rag_data_access.id
+  }
+
   provisioner "local-exec" {
     command = <<-EOF
       set -e
 
       # Install opensearch-py and dependencies
+      echo "Installing Python dependencies..."
       pip3 install --quiet --user opensearch-py boto3 requests requests-aws4auth
 
       # Wait for collection and access policies to be active and propagated
       echo "Waiting for OpenSearch collection and access policies to be fully active..."
-      sleep 60
+      sleep 90
 
       python3 << 'PYTHON_SCRIPT'
 import boto3
@@ -183,6 +189,15 @@ for attempt in range(max_retries):
         else:
             print(f'Error after {max_retries} attempts: {str(e)}')
             raise
+
+# Final verification
+print("Verifying index creation...")
+if client.indices.exists(index=index_name):
+    print(f'SUCCESS: Index {index_name} exists and is ready')
+    exit(0)
+else:
+    print(f'ERROR: Index {index_name} does not exist after creation')
+    exit(1)
 PYTHON_SCRIPT
     EOF
   }
