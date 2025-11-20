@@ -53,8 +53,20 @@ resource "aws_iam_role_policy" "lambda_policy" {
         Effect = "Allow"
         Action = [
           "bedrock:InvokeModel",
-          "bedrock-agent:StartIngestionJob",
-          "bedrock-agent:ListDataSources",
+          "bedrock:Retrieve",
+          "bedrock:RetrieveAndGenerate"
+        ]
+        Resource = "*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "bedrock:ListDataSources",
+          "bedrock:GetDataSource",
+          "bedrock:StartIngestionJob",
+          "bedrock:GetIngestionJob",
+          "bedrock:ListIngestionJobs",
+          "bedrock:GetKnowledgeBase"
         ]
         Resource = "*"
       },

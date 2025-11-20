@@ -7,7 +7,7 @@ on:
     types: [completed]
     branches:
       - main
-     # - feature/rag_pipeline 
+      - feature/rag_pipeline 
 
 env:
   COMMIT_SHA: ${{ github.event.workflow_run.head_sha || github.sha }} 
