@@ -1,4 +1,3 @@
-# Role chung cho tất cả các Lambda Functions
 resource "aws_iam_role" "lambda_exec" {
   name = "${var.project}-lambda-exec-role"
 
@@ -16,7 +15,7 @@ resource "aws_iam_role" "lambda_exec" {
   })
 }
 
-# Policy cho phép Lambda truy cập Logs, S3, Bedrock, và OpenSearch
+
 resource "aws_iam_role_policy" "lambda_policy" {
   name = "${var.project}-lambda-policy"
   role = aws_iam_role.lambda_exec.id
@@ -24,7 +23,7 @@ resource "aws_iam_role_policy" "lambda_policy" {
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
-      # Quyền CloudWatch Logs
+      # CloudWatch
       {
         Effect = "Allow"
         Action = [
@@ -34,7 +33,7 @@ resource "aws_iam_role_policy" "lambda_policy" {
         ]
         Resource = "arn:aws:logs:*:*:*"
       },
-      # Quyền đọc/ghi S3 và truy cập Artifacts
+      # Bucket
       {
         Effect = "Allow"
         Action = [
@@ -43,23 +42,23 @@ resource "aws_iam_role_policy" "lambda_policy" {
           "s3:PutObject",
         ]
         Resource = [
-          "${aws_s3_bucket.rag_artifacts.arn}/*",
+          "${data.aws_s3_bucket.rag_artifacts.arn}/*",
           "${aws_s3_bucket.rag_documents.arn}/*",
-          aws_s3_bucket.rag_artifacts.arn,
+          data.aws_s3_bucket.rag_artifacts.arn,
           aws_s3_bucket.rag_documents.arn,
         ]
       },
-      # Quyền Bedrock (triển khai API Gateway sau)
+
       {
         Effect = "Allow"
         Action = [
           "bedrock:InvokeModel",
-          "bedrock-agent:StartIngestionJob", # Dùng cho Lambda Ingest
+          "bedrock-agent:StartIngestionJob",
           "bedrock-agent:ListDataSources",
         ]
         Resource = "*"
       },
-      # Quyền OpenSearch
+
       {
         Effect = "Allow"
         Action = [

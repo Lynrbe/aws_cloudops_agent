@@ -10,10 +10,10 @@ output "documents_bucket_name" {
 
 output "artifacts_bucket_name" {
   description = "Tên Bucket lưu trữ artifacts Lambda ZIP."
-  value       = aws_s3_bucket.rag_artifacts.id
+  value       = data.aws_s3_bucket.rag_artifacts.id
 }
 
 output "knowledge_base_id" {
   description = "ID của Bedrock Knowledge Base đã tạo."
-  value       = aws_bedrock_knowledge_base.kb.id
+  value       = aws_bedrockagent_knowledge_base.kb.id
 }

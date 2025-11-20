@@ -1,8 +1,6 @@
 # 1. Bucket lưu trữ Artifact (Lambda ZIP files)
-resource "aws_s3_bucket" "rag_artifacts" {
+data "aws_s3_bucket" "rag_artifacts" {
   bucket = var.artifact_bucket_name
-  force_destroy = true
-  tags = { Name = "${var.project}-artifacts" }
 }
 
 # 2. Bucket lưu trữ Documents (Tài liệu nguồn cho RAG)

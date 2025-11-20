@@ -5,7 +5,7 @@ resource "aws_lambda_function" "ingest" {
   handler       = "lambda_handler.lambda_handler"
   runtime       = "python3.12"
 
-  s3_bucket = aws_s3_bucket.rag_artifacts.bucket
+  s3_bucket = data.aws_s3_bucket.rag_artifacts.bucket
   # Key được truyền từ GitHub Actions
   s3_key    = var.ingest_artifact_key 
 
@@ -14,7 +14,7 @@ resource "aws_lambda_function" "ingest" {
 
   environment {
     variables = {
-      KNOWLEDGE_BASE_ID = aws_bedrock_knowledge_base.kb.id
+      KNOWLEDGE_BASE_ID = aws_bedrockagent_knowledge_base.kb.id
       REGION = var.region
     }
   }
