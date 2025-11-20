@@ -85,12 +85,6 @@ memory:
   description: "AWS CloudOps Agent conversation memory storage"
   event_expiry_days: 30
 
-# Knowledge base settings
-knowledge_base:
-  kb_id: "YFWTYESFEC"
-  data_source_id: "5RQOIDT6HD"
-  bucket: "test-cloudops-agent-kb-bucket"
-
 # Deployment Settings (used by deployment scripts) 
 deployment:
   aws_profile: ""  # Leave empty to use default AWS credentials
