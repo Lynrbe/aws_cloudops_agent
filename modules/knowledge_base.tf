@@ -33,8 +33,14 @@ resource "aws_iam_role_policy" "kb_policy" {
       # Quyền OpenSearch Serverless
       {
         Effect = "Allow"
-        Action = ["aoss:APIAccessAll"] 
+        Action = ["aoss:APIAccessAll"]
         Resource = aws_opensearchserverless_collection.rag_collection.arn
+      },
+      # Quyền Bedrock Model Invocation
+      {
+        Effect = "Allow"
+        Action = ["bedrock:InvokeModel"]
+        Resource = "arn:aws:bedrock:${var.region}::foundation-model/*"
       }
     ]
   })
@@ -79,7 +85,13 @@ resource "aws_bedrockagent_data_source" "docs_data_source" {
     type = "S3"
     s3_configuration {
       bucket_arn = aws_s3_bucket.rag_documents.arn
-      inclusion_prefixes = ["docs/"] 
+      inclusion_prefixes = ["docs/"]
     }
+  }
+
+  lifecycle {
+    replace_triggered_by = [
+      aws_bedrockagent_knowledge_base.kb.id
+    ]
   }
 }
