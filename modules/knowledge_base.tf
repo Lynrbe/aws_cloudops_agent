@@ -46,8 +46,9 @@ resource "aws_iam_role_policy" "kb_policy" {
       {
         Effect = "Allow"
         Action = [
+          "aws-marketplace:Subscribe",
           "aws-marketplace:ViewSubscriptions",
-          "aws-marketplace:Subscribe"
+          "aws-marketplace:Unsubscribe"
         ]
         Resource = "*"
       }
