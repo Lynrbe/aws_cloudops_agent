@@ -49,7 +49,7 @@ resource "aws_bedrockagent_knowledge_base" "kb" {
   knowledge_base_configuration {
     type = "VECTOR"
     vector_knowledge_base_configuration {
-      embedding_model_arn = "arn:aws:bedrock:${var.region}::foundation-model/amazon.titan-embed-text-v2:0"
+      embedding_model_arn = "arn:aws:bedrock:${var.region}::foundation-model/cohere.embed-english-v3"
     }
   }
 
