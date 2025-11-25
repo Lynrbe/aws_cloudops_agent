@@ -107,7 +107,7 @@ import time
 from opensearchpy import OpenSearch, RequestsHttpConnection
 from requests_aws4auth import AWS4Auth
 
-region = '${var.region}'
+region = 'ap-southeast-2'
 host = '${aws_opensearchserverless_collection.rag_collection.collection_endpoint}'
 host = host.replace('https://', '')
 
