@@ -1,1 +1,1 @@
-{"statusCode": 404, "body": "{\"error\": \"Data Source not found.\"}"}
+{"statusCode": 200, "body": "{\"message\": \"Ingestion job started for KB GRRTFCFEHX\", \"knowledgeBaseId\": \"GRRTFCFEHX\", \"dataSourceId\": \"6LXUNH81XU\", \"ingestionJobId\": \"ZBVMF9HZQC\"}"}
