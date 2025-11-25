@@ -15,7 +15,7 @@ resource "aws_lambda_function" "retrieve" {
   environment {
     variables = {
       KNOWLEDGE_BASE_ID = aws_bedrockagent_knowledge_base.kb.id
-      REGION = var.region
+      REGION = var.bedrock_region
     }
   }
 }

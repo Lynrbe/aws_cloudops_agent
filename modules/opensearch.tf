@@ -1,4 +1,5 @@
 resource "aws_opensearchserverless_security_policy" "encryption_policy" {
+  provider = aws.bedrock
   name = "${var.project}-encrypt-policy"
   type = "encryption"
   
@@ -15,6 +16,7 @@ resource "aws_opensearchserverless_security_policy" "encryption_policy" {
 }
 
 resource "aws_opensearchserverless_security_policy" "network_policy" {
+  provider = aws.bedrock
   name = "${var.project}-network-policy"
   type = "network"
 
@@ -33,6 +35,7 @@ resource "aws_opensearchserverless_security_policy" "network_policy" {
 
 # 3. OpenSearch Serverless Collection
 resource "aws_opensearchserverless_collection" "rag_collection" {
+  provider = aws.bedrock
   name = "${var.project}-kb-collection"
   type = "VECTORSEARCH"
 
@@ -44,6 +47,7 @@ resource "aws_opensearchserverless_collection" "rag_collection" {
 
 # 4. Access Policy
 resource "aws_opensearchserverless_access_policy" "rag_data_access" {
+  provider = aws.bedrock
   name = "${var.project}-kb-access"
   type = "data"
 

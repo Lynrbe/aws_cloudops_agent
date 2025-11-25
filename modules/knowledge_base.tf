@@ -40,7 +40,7 @@ resource "aws_iam_role_policy" "kb_policy" {
       {
         Effect = "Allow"
         Action = ["bedrock:InvokeModel"]
-        Resource = "arn:aws:bedrock:ap-southeast-2::foundation-model/*"
+        Resource = "arn:aws:bedrock:${var.bedrock_region}::foundation-model/*"
       },
       # AWS Marketplace permissions for Cohere model
       {
@@ -58,6 +58,7 @@ resource "aws_iam_role_policy" "kb_policy" {
 
 # Bedrock Knowledge Base
 resource "aws_bedrockagent_knowledge_base" "kb" {
+  provider    = aws.bedrock
   name        = "${var.project}-kb"
   description = "Knowledge Base for RAG"
   role_arn    = aws_iam_role.kb_service_role.arn
@@ -65,7 +66,7 @@ resource "aws_bedrockagent_knowledge_base" "kb" {
   knowledge_base_configuration {
     type = "VECTOR"
     vector_knowledge_base_configuration {
-      embedding_model_arn = "arn:aws:bedrock:ap-southeast-2::foundation-model/amazon.titan-embed-text-v2:0"
+      embedding_model_arn = "arn:aws:bedrock:${var.bedrock_region}::foundation-model/amazon.titan-embed-text-v2:0"
     }
   }
 
@@ -89,6 +90,7 @@ resource "aws_bedrockagent_knowledge_base" "kb" {
 
 # Data Source (Kết nối S3 Documents với KB)
 resource "aws_bedrockagent_data_source" "docs_data_source" {
+  provider           = aws.bedrock
   name               = "docs-data-source"
   knowledge_base_id  = aws_bedrockagent_knowledge_base.kb.id
   data_source_configuration {
