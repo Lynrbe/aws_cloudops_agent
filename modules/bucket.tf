@@ -6,8 +6,8 @@ data "aws_s3_bucket" "rag_artifacts" {
 # 2. Bucket lưu trữ Documents (Tài liệu nguồn cho RAG) - in Bedrock region (ap-southeast-2)
 resource "aws_s3_bucket" "rag_documents" {
   provider = aws.bedrock
-  bucket = "${var.project}-documents-${data.aws_caller_identity.current.account_id}"
-  tags = { Name = "${var.project}-documents" }
+  bucket = "${var.project}-documents-${var.bedrock_region}-${data.aws_caller_identity.current.account_id}"
+  tags = { Name = "${var.project}-documents-${var.bedrock_region}" }
 }
 
 # Lấy ID Account để tạo tên Bucket duy nhất
