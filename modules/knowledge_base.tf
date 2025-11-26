@@ -88,11 +88,13 @@ resource "aws_bedrockagent_knowledge_base" "kb" {
   ]
 }
 
-# Data Source (Kết nối S3 Documents với KB)
+# Data Source 
 resource "aws_bedrockagent_data_source" "docs_data_source" {
-  provider           = aws.bedrock
-  name               = "docs-data-source"
-  knowledge_base_id  = aws_bedrockagent_knowledge_base.kb.id
+  provider              = aws.bedrock
+  name                  = "docs-data-source"
+  knowledge_base_id     = aws_bedrockagent_knowledge_base.kb.id
+  data_deletion_policy  = "DELETE"  # Automatically delete OpenSearch data when data source is deleted
+
   data_source_configuration {
     type = "S3"
     s3_configuration {
