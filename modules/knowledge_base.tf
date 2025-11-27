@@ -88,12 +88,12 @@ resource "aws_bedrockagent_knowledge_base" "kb" {
   ]
 }
 
-# Data Source 
+# Data Source
 resource "aws_bedrockagent_data_source" "docs_data_source" {
   provider              = aws.bedrock
   name                  = "docs-data-source"
   knowledge_base_id     = aws_bedrockagent_knowledge_base.kb.id
-  data_deletion_policy  = "DELETE"  # Automatically delete OpenSearch data when data source is deleted
+  data_deletion_policy  = "RETAIN"  # Keep OpenSearch data when data source is deleted/updated
 
   data_source_configuration {
     type = "S3"
