@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - feature/pipeline
+      - feature/rag_pipeline
   # Uncomment below after testing to enable automatic CD trigger
   # workflow_run:
   #   workflows: ["CI - Build Lambda & Upload Artifacts"]
