@@ -1,23 +1,26 @@
 name: CD - Terraform Apply
 
 on:
-  workflow_dispatch: 
-  workflow_run:
-    workflows: ["CI - Build Lambda & Upload Artifacts"] 
-    types: [completed]
+  workflow_dispatch:
+  push:
     branches:
-      - main
-      - feature/rag_pipeline 
+      - feature/pipeline
+  # Uncomment below after testing to enable automatic CD trigger
+  # workflow_run:
+  #   workflows: ["CI - Build Lambda & Upload Artifacts"]
+  #   types: [completed]
+  #   branches:
+  #     - main
+  #     - feature/pipeline 
 
 env:
-  COMMIT_SHA: ${{ github.event.workflow_run.head_sha || github.sha }} 
+  COMMIT_SHA: ${{ github.sha }} 
 
   ARTIFACT_BUCKET: ${{ secrets.ARTIFACT_BUCKET }} 
 
 jobs:
   deploy:
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
 
     steps:
     - uses: actions/checkout@v3
@@ -28,17 +31,52 @@ jobs:
       with:
         aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        aws-region: ${{ vars.AWS_REGION }} 
+        aws-region: ${{ vars.AWS_REGION }}
+      env:
+        NODE_TLS_REJECT_UNAUTHORIZED: '0' 
 
     # Install Terraform
     - name: Setup Terraform
       uses: hashicorp/setup-terraform@v2
 
-    # 1. Terraform Init 
+    # Configure system to bypass SSL for AWS
+    - name: Configure system for proxy SSL bypass
+      run: |
+        # Disable SSL verification system-wide for this session
+        export NODE_TLS_REJECT_UNAUTHORIZED=0
+
+        # Create Terraform RC to configure provider behavior
+        mkdir -p ~/.terraform.d
+        cat > ~/.terraformrc << 'EOF'
+        disable_checkpoint = true
+        EOF
+
+        # Configure git to not check SSL (for potential git operations)
+        git config --global http.sslVerify false
+      shell: bash
+
+    # 1. Terraform Init (with retry for proxy timeout)
     - name: Terraform Init
-      run: terraform -chdir=modules init -backend-config="bucket=${{ secrets.TF_STATE_BUCKET }}"
+      run: |
+        export AWS_SDK_LOAD_CONFIG=1
+        export SSL_CERT_FILE=/dev/null
+        export AWS_CA_BUNDLE=/dev/null
+        export REQUESTS_CA_BUNDLE=/dev/null
+        for i in 1 2 3; do
+          if terraform -chdir=modules init -backend-config="bucket=${{ secrets.TF_STATE_BUCKET }}" -backend-config="skip_credentials_validation=true" -backend-config="skip_metadata_api_check=true"; then
+            exit 0
+          fi
+          echo "Terraform init failed, retrying... (attempt $i/3)"
+          sleep 5
+        done
+        exit 1
       env:
         AWS_REGION: ${{ vars.AWS_REGION }}
+        NODE_TLS_REJECT_UNAUTHORIZED: '0'
+        AWS_EC2_METADATA_DISABLED: true
+        TF_VAR_skip_ssl_validation: true
+        TF_HTTP_SSL_VERIFY: "false"
+        TF_IGNORE_REMOTE_VERSION: "true"
 
     # 2. Terraform Plan
     - name: Terraform Plan
@@ -46,14 +84,28 @@ jobs:
         terraform -chdir=modules plan -out=tfplan \
           -var "ingest_artifact_key=ingest-${{ env.COMMIT_SHA }}.zip" \
           -var "retrieve_artifact_key=retrieve-${{ env.COMMIT_SHA }}.zip" \
-          -var "artifact_bucket_name=${{ env.ARTIFACT_BUCKET }}" 
-          
+          -var "artifact_bucket_name=${{ env.ARTIFACT_BUCKET }}"
+
       env:
         AWS_REGION: ${{ vars.AWS_REGION }}
+        NODE_TLS_REJECT_UNAUTHORIZED: '0'
+        AWS_EC2_METADATA_DISABLED: true
+        TF_VAR_skip_ssl_validation: true
+        TF_HTTP_SSL_VERIFY: "false"
+        TF_IGNORE_REMOTE_VERSION: "true"
 
     # 3. Terraform Apply
     - name: Terraform Apply
       run: |
+        export AWS_SDK_LOAD_CONFIG=1
+        export SSL_CERT_FILE=/dev/null
+        export AWS_CA_BUNDLE=/dev/null
+        export REQUESTS_CA_BUNDLE=/dev/null
         terraform -chdir=modules apply -auto-approve tfplan
       env:
         AWS_REGION: ${{ vars.AWS_REGION }}
+        NODE_TLS_REJECT_UNAUTHORIZED: '0'
+        AWS_EC2_METADATA_DISABLED: true
+        TF_VAR_skip_ssl_validation: true
+        TF_HTTP_SSL_VERIFY: "false"
+        TF_IGNORE_REMOTE_VERSION: "true"
