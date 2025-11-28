@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - feature/rag_pipeline
+      - feature/pipeline
   # Uncomment below after testing to enable automatic CD trigger
   # workflow_run:
   #   workflows: ["CI - Build Lambda & Upload Artifacts"]
@@ -78,6 +78,28 @@ jobs:
         TF_VAR_skip_ssl_validation: true
         TF_HTTP_SSL_VERIFY: "false"
         TF_IGNORE_REMOTE_VERSION: "true"
+
+    # 1.5. Remove orphaned resources from state
+    - name: Clean up orphaned resources
+      run: |
+        # Unset CA bundle variables
+        unset AWS_CA_BUNDLE
+        unset SSL_CERT_FILE
+        unset REQUESTS_CA_BUNDLE
+        export AWS_SDK_LOAD_CONFIG=1
+
+        # Check if orphaned resources exist and remove them
+        terraform -chdir=modules state list | grep -E "(aws_lambda_permission.allow_s3_invoke|aws_s3_bucket_notification.document_upload_trigger)" || true
+
+        # Remove orphaned resources if they exist
+        terraform -chdir=modules state rm aws_lambda_permission.allow_s3_invoke 2>/dev/null || true
+        terraform -chdir=modules state rm aws_s3_bucket_notification.document_upload_trigger 2>/dev/null || true
+      continue-on-error: true
+      env:
+        AWS_REGION: ${{ vars.AWS_REGION }}
+        NODE_TLS_REJECT_UNAUTHORIZED: '0'
+        AWS_EC2_METADATA_DISABLED: true
+        TF_HTTP_SSL_VERIFY: "false"
 
     # 2. Terraform Plan
     - name: Terraform Plan
