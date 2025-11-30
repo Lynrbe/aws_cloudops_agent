@@ -1,12 +1,6 @@
 # Lambda Ingestion - triggers KB ingestion when files uploaded to S3
 # MUST be in same region as S3 Documents bucket (ap-southeast-2) for S3 event trigger
-# Use inline code to avoid cross-region S3 bucket access issues
-
-data "archive_file" "lambda_ingest_zip" {
-  type        = "zip"
-  source_dir  = "${path.module}/../assets/ingest_lambda"
-  output_path = "${path.module}/../build/lambda_ingest.zip"
-}
+# Uses artifact uploaded to S3 by CI workflow
 
 resource "aws_lambda_function" "ingest" {
   provider = aws.bedrock  # Deploy to ap-southeast-2 (same as S3 Documents and Knowledge Base)
@@ -16,8 +10,10 @@ resource "aws_lambda_function" "ingest" {
   handler       = "lambda_handler.lambda_handler"
   runtime       = "python3.12"
 
-  filename         = data.archive_file.lambda_ingest_zip.output_path
-  source_code_hash = data.archive_file.lambda_ingest_zip.output_base64sha256
+  # Use artifact from S3 bucket uploaded by CI workflow
+  s3_bucket        = var.artifact_bucket_name
+  s3_key           = var.ingest_artifact_key
+  source_code_hash = filebase64sha256("${path.module}/../assets/ingest_lambda/lambda_handler.py")
 
   timeout     = 30
   memory_size = 512
