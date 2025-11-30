@@ -34,15 +34,3 @@ jobs:
       run: |
         aws s3 cp assets/ingest_lambda/ingest.zip \
           s3://${{ secrets.ARTIFACT_BUCKET }}/ingest-${{ github.sha }}.zip
-
-    # 2. Build Lambda Retrieve
-    - name: Build retrieve lambda
-      run: |
-        cd assets/retrieve_lambda
-        # pip install -r requirements.txt -t .
-        zip -r retrieve.zip .
-        cd ../../
-    - name: Upload retrieve artifact
-      run: |
-        aws s3 cp assets/retrieve_lambda/retrieve.zip \
-          s3://${{ secrets.ARTIFACT_BUCKET }}/retrieve-${{ github.sha }}.zip

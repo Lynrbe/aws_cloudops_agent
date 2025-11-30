@@ -25,8 +25,3 @@ variable "ingest_artifact_key" {
   description = "Key S3 của file zip Lambda Ingest mới nhất."
   type        = string
 }
-
-variable "retrieve_artifact_key" {
-  description = "Key S3 của file zip Lambda Retrieve mới nhất."
-  type        = string
-}

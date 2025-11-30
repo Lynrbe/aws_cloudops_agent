@@ -99,39 +99,33 @@ jobs:
 
         # Import S3 bucket
         terraform import -var "ingest_artifact_key=ingest-${{ env.COMMIT_SHA }}.zip" \
-          -var "retrieve_artifact_key=retrieve-${{ env.COMMIT_SHA }}.zip" \
           -var "artifact_bucket_name=${{ env.ARTIFACT_BUCKET }}" \
           aws_s3_bucket.rag_documents "rag-agent-system-documents-ap-southeast-2-${AWS_ACCOUNT_ID}" 2>/dev/null || echo "S3 bucket not found or already imported"
 
         # Import IAM roles
         terraform import -var "ingest_artifact_key=ingest-${{ env.COMMIT_SHA }}.zip" \
-          -var "retrieve_artifact_key=retrieve-${{ env.COMMIT_SHA }}.zip" \
           -var "artifact_bucket_name=${{ env.ARTIFACT_BUCKET }}" \
           aws_iam_role.lambda_exec "rag-agent-system-lambda-exec-role" 2>/dev/null || echo "Lambda exec role not found or already imported"
 
         terraform import -var "ingest_artifact_key=ingest-${{ env.COMMIT_SHA }}.zip" \
-          -var "retrieve_artifact_key=retrieve-${{ env.COMMIT_SHA }}.zip" \
           -var "artifact_bucket_name=${{ env.ARTIFACT_BUCKET }}" \
           aws_iam_role.kb_service_role "rag-agent-system-kb-service-role" 2>/dev/null || echo "KB service role not found or already imported"
 
         # Import OpenSearch policies (format: name/type)
         AWS_REGION=ap-southeast-2 terraform import -var "ingest_artifact_key=ingest-${{ env.COMMIT_SHA }}.zip" \
-          -var "retrieve_artifact_key=retrieve-${{ env.COMMIT_SHA }}.zip" \
           -var "artifact_bucket_name=${{ env.ARTIFACT_BUCKET }}" \
-          'aws_opensearchserverless_security_policy.encryption_policy' 'rag-agent-system-encrypt-policy/encryption' 2>/dev/null || echo "Encryption policy not found or already imported"
+          aws_opensearchserverless_security_policy.encryption_policy 'rag-agent-system-encrypt-policy/encryption' 2>/dev/null || echo "Encryption policy not found or already imported"
 
         AWS_REGION=ap-southeast-2 terraform import -var "ingest_artifact_key=ingest-${{ env.COMMIT_SHA }}.zip" \
-          -var "retrieve_artifact_key=retrieve-${{ env.COMMIT_SHA }}.zip" \
           -var "artifact_bucket_name=${{ env.ARTIFACT_BUCKET }}" \
-          'aws_opensearchserverless_security_policy.network_policy' 'rag-agent-system-network-policy/network' 2>/dev/null || echo "Network policy not found or already imported"
-        
+          aws_opensearchserverless_security_policy.network_policy 'rag-agent-system-network-policy/network' 2>/dev/null || echo "Network policy not found or already imported"
+
         # Import OpenSearch Serverless Collection
         COLLECTION_ID=$(aws opensearchserverless list-collections --region ap-southeast-2 --query "collectionSummaries[?name=='rag-agent-system-kb-collection'].id" --output text 2>/dev/null || echo "")
         if [ -n "$COLLECTION_ID" ]; then
           echo "Found OpenSearch collection ID: $COLLECTION_ID"
           AWS_REGION=ap-southeast-2 terraform import -var "ingest_artifact_key=ingest-${{ env.COMMIT_SHA }}.zip" \
-            -var "retrieve_artifact_key=retrieve-${{ env.COMMIT_SHA }}.zip" \
-            -var "artifact_bucket_name=${{ env.ARTIFACT_BUCKET }}" \
+              -var "artifact_bucket_name=${{ env.ARTIFACT_BUCKET }}" \
             aws_opensearchserverless_collection.rag_collection "$COLLECTION_ID" 2>/dev/null || echo "Collection already imported"
         else
           echo "OpenSearch collection not found or cannot list collections"
@@ -139,7 +133,6 @@ jobs:
 
         # Import OpenSearch Access Policy
         AWS_REGION=ap-southeast-2 terraform import -var "ingest_artifact_key=ingest-${{ env.COMMIT_SHA }}.zip" \
-          -var "retrieve_artifact_key=retrieve-${{ env.COMMIT_SHA }}.zip" \
           -var "artifact_bucket_name=${{ env.ARTIFACT_BUCKET }}" \
           aws_opensearchserverless_access_policy.rag_data_access 'rag-agent-system-kb-access/data' 2>/dev/null || echo "Access policy not found or already imported"
 
@@ -147,10 +140,14 @@ jobs:
         KB_ID=$(aws bedrock-agent list-knowledge-bases --region ap-southeast-2 --query "knowledgeBaseSummaries[?name=='rag-agent-system-kb'].knowledgeBaseId" --output text 2>/dev/null || echo "")
         if [ -n "$KB_ID" ]; then
           echo "Found Knowledge Base ID: $KB_ID"
-          AWS_REGION=ap-southeast-2 terraform import -var "ingest_artifact_key=ingest-${{ env.COMMIT_SHA }}.zip" \
-            -var "retrieve_artifact_key=retrieve-${{ env.COMMIT_SHA }}.zip" \
-            -var "artifact_bucket_name=${{ env.ARTIFACT_BUCKET }}" \
-            aws_bedrockagent_knowledge_base.kb "$KB_ID" 2>/dev/null || echo "Knowledge Base already imported"
+          # Check if already in state before importing
+          if ! terraform state show aws_bedrockagent_knowledge_base.kb &>/dev/null; then
+            AWS_REGION=ap-southeast-2 terraform import -var "ingest_artifact_key=ingest-${{ env.COMMIT_SHA }}.zip" \
+                  -var "artifact_bucket_name=${{ env.ARTIFACT_BUCKET }}" \
+              aws_bedrockagent_knowledge_base.kb "$KB_ID" 2>/dev/null || echo "Knowledge Base import failed"
+          else
+            echo "Knowledge Base already in state, skipping import"
+          fi
         else
           echo "Knowledge Base not found or cannot list"
         fi
@@ -160,15 +157,19 @@ jobs:
           DATA_SOURCE_ID=$(aws bedrock-agent list-data-sources --knowledge-base-id "$KB_ID" --region ap-southeast-2 --query "dataSourceSummaries[?name=='docs-data-source'].dataSourceId" --output text 2>/dev/null || echo "")
           if [ -n "$DATA_SOURCE_ID" ]; then
             echo "Found Data Source ID: $DATA_SOURCE_ID"
-            AWS_REGION=ap-southeast-2 terraform import -var "ingest_artifact_key=ingest-${{ env.COMMIT_SHA }}.zip" \
-              -var "retrieve_artifact_key=retrieve-${{ env.COMMIT_SHA }}.zip" \
-              -var "artifact_bucket_name=${{ env.ARTIFACT_BUCKET }}" \
-              aws_bedrockagent_data_source.docs_data_source "${KB_ID},${DATA_SOURCE_ID}" 2>/dev/null || echo "Data Source already imported"
+            # Check if already in state before importing
+            if ! terraform state show aws_bedrockagent_data_source.docs_data_source &>/dev/null; then
+              AWS_REGION=ap-southeast-2 terraform import -var "ingest_artifact_key=ingest-${{ env.COMMIT_SHA }}.zip" \
+                      -var "artifact_bucket_name=${{ env.ARTIFACT_BUCKET }}" \
+                aws_bedrockagent_data_source.docs_data_source "${KB_ID},${DATA_SOURCE_ID}" 2>/dev/null || echo "Data Source import failed"
+            else
+              echo "Data Source already in state, skipping import"
+            fi
           else
             echo "Data Source not found"
           fi
         fi
-        
+
         cd ..
         echo "Import complete"
       continue-on-error: true
@@ -182,7 +183,6 @@ jobs:
       run: |
         terraform -chdir=modules plan -out=tfplan \
           -var "ingest_artifact_key=ingest-${{ env.COMMIT_SHA }}.zip" \
-          -var "retrieve_artifact_key=retrieve-${{ env.COMMIT_SHA }}.zip" \
           -var "artifact_bucket_name=${{ env.ARTIFACT_BUCKET }}"
 
       env:
