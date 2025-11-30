@@ -124,7 +124,51 @@ jobs:
           -var "retrieve_artifact_key=retrieve-${{ env.COMMIT_SHA }}.zip" \
           -var "artifact_bucket_name=${{ env.ARTIFACT_BUCKET }}" \
           'aws_opensearchserverless_security_policy.network_policy' 'rag-agent-system-network-policy/network' 2>/dev/null || echo "Network policy not found or already imported"
+        
+        # Import OpenSearch Serverless Collection
+        COLLECTION_ID=$(aws opensearchserverless list-collections --region ap-southeast-2 --query "collectionSummaries[?name=='rag-agent-system-kb-collection'].id" --output text 2>/dev/null || echo "")
+        if [ -n "$COLLECTION_ID" ]; then
+          echo "Found OpenSearch collection ID: $COLLECTION_ID"
+          AWS_REGION=ap-southeast-2 terraform import -var "ingest_artifact_key=ingest-${{ env.COMMIT_SHA }}.zip" \
+            -var "retrieve_artifact_key=retrieve-${{ env.COMMIT_SHA }}.zip" \
+            -var "artifact_bucket_name=${{ env.ARTIFACT_BUCKET }}" \
+            aws_opensearchserverless_collection.rag_collection "$COLLECTION_ID" 2>/dev/null || echo "Collection already imported"
+        else
+          echo "OpenSearch collection not found or cannot list collections"
+        fi
 
+        # Import OpenSearch Access Policy
+        AWS_REGION=ap-southeast-2 terraform import -var "ingest_artifact_key=ingest-${{ env.COMMIT_SHA }}.zip" \
+          -var "retrieve_artifact_key=retrieve-${{ env.COMMIT_SHA }}.zip" \
+          -var "artifact_bucket_name=${{ env.ARTIFACT_BUCKET }}" \
+          aws_opensearchserverless_access_policy.rag_data_access 'rag-agent-system-kb-access/data' 2>/dev/null || echo "Access policy not found or already imported"
+
+        # Import Knowledge Base
+        KB_ID=$(aws bedrock-agent list-knowledge-bases --region ap-southeast-2 --query "knowledgeBaseSummaries[?name=='rag-agent-system-kb'].knowledgeBaseId" --output text 2>/dev/null || echo "")
+        if [ -n "$KB_ID" ]; then
+          echo "Found Knowledge Base ID: $KB_ID"
+          AWS_REGION=ap-southeast-2 terraform import -var "ingest_artifact_key=ingest-${{ env.COMMIT_SHA }}.zip" \
+            -var "retrieve_artifact_key=retrieve-${{ env.COMMIT_SHA }}.zip" \
+            -var "artifact_bucket_name=${{ env.ARTIFACT_BUCKET }}" \
+            aws_bedrockagent_knowledge_base.kb "$KB_ID" 2>/dev/null || echo "Knowledge Base already imported"
+        else
+          echo "Knowledge Base not found or cannot list"
+        fi
+
+        # Import Data Source if KB exists
+        if [ -n "$KB_ID" ]; then
+          DATA_SOURCE_ID=$(aws bedrock-agent list-data-sources --knowledge-base-id "$KB_ID" --region ap-southeast-2 --query "dataSourceSummaries[?name=='docs-data-source'].dataSourceId" --output text 2>/dev/null || echo "")
+          if [ -n "$DATA_SOURCE_ID" ]; then
+            echo "Found Data Source ID: $DATA_SOURCE_ID"
+            AWS_REGION=ap-southeast-2 terraform import -var "ingest_artifact_key=ingest-${{ env.COMMIT_SHA }}.zip" \
+              -var "retrieve_artifact_key=retrieve-${{ env.COMMIT_SHA }}.zip" \
+              -var "artifact_bucket_name=${{ env.ARTIFACT_BUCKET }}" \
+              aws_bedrockagent_data_source.docs_data_source "${KB_ID},${DATA_SOURCE_ID}" 2>/dev/null || echo "Data Source already imported"
+          else
+            echo "Data Source not found"
+          fi
+        fi
+        
         cd ..
         echo "Import complete"
       continue-on-error: true
