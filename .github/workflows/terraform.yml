@@ -114,16 +114,16 @@ jobs:
           -var "artifact_bucket_name=${{ env.ARTIFACT_BUCKET }}" \
           aws_iam_role.kb_service_role "rag-agent-system-kb-service-role" 2>/dev/null || echo "KB service role not found or already imported"
 
-        # Import OpenSearch policies (format: name|type)
+        # Import OpenSearch policies (format: name/type)
         AWS_REGION=ap-southeast-2 terraform import -var "ingest_artifact_key=ingest-${{ env.COMMIT_SHA }}.zip" \
           -var "retrieve_artifact_key=retrieve-${{ env.COMMIT_SHA }}.zip" \
           -var "artifact_bucket_name=${{ env.ARTIFACT_BUCKET }}" \
-          'aws_opensearchserverless_security_policy.encryption_policy' 'rag-agent-system-encrypt-policy|encryption' 2>/dev/null || echo "Encryption policy not found or already imported"
+          'aws_opensearchserverless_security_policy.encryption_policy' 'rag-agent-system-encrypt-policy/encryption' 2>/dev/null || echo "Encryption policy not found or already imported"
 
         AWS_REGION=ap-southeast-2 terraform import -var "ingest_artifact_key=ingest-${{ env.COMMIT_SHA }}.zip" \
           -var "retrieve_artifact_key=retrieve-${{ env.COMMIT_SHA }}.zip" \
           -var "artifact_bucket_name=${{ env.ARTIFACT_BUCKET }}" \
-          'aws_opensearchserverless_security_policy.network_policy' 'rag-agent-system-network-policy|network' 2>/dev/null || echo "Network policy not found or already imported"
+          'aws_opensearchserverless_security_policy.network_policy' 'rag-agent-system-network-policy/network' 2>/dev/null || echo "Network policy not found or already imported"
 
         cd ..
         echo "Import complete"
