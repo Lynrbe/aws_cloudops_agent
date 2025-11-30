@@ -152,7 +152,25 @@ jobs:
         TF_HTTP_SSL_VERIFY: "false"
         TF_IGNORE_REMOTE_VERSION: "true"
 
-    # 4. Backup Terraform state to S3 (using AWS CLI which can handle the proxy)
+    # 4. Update Knowledge Base ID in config
+    - name: Update Knowledge Base ID in config
+      if: success()
+      run: |
+        echo "Extracting Knowledge Base ID from Terraform output..."
+        cd modules
+        KB_ID=$(terraform output -raw knowledge_base_id)
+        echo "Knowledge Base ID: $KB_ID"
+
+        # Update the config file
+        cd ..
+        sed -i "s/id: \".*\"  # Will be set by Terraform or manually after KB deployment/id: \"$KB_ID\"  # Auto-updated by Terraform/" config/static-config.yaml
+
+        echo "Knowledge Base ID updated in config/static-config.yaml"
+      env:
+        AWS_REGION: ${{ vars.AWS_REGION }}
+        NODE_TLS_REJECT_UNAUTHORIZED: '0'
+
+    # 5. Backup Terraform state to S3 (using AWS CLI which can handle the proxy)
     - name: Backup Terraform State to S3
       if: success()
       run: |
