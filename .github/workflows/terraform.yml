@@ -81,43 +81,57 @@ jobs:
         TF_HTTP_SSL_VERIFY: "false"
         TF_IGNORE_REMOTE_VERSION: "true"
 
-    # 1.5. Clean up conflicting resources
-    - name: Remove existing resources that conflict with Terraform
+    # 1.5. Import existing resources into Terraform state
+    - name: Import existing resources into Terraform state
       run: |
-        echo "Cleaning up existing AWS resources..."
+        echo "Importing existing AWS resources into Terraform state..."
 
-        # Remove S3 bucket notification first
-        echo "Clearing S3 bucket notifications..."
-        aws s3api put-bucket-notification-configuration \
-          --bucket rag-agent-system-documents \
-          --notification-configuration '{}' \
-          --region ap-southeast-2 2>/dev/null || echo "S3 notification does not exist or already removed"
+        # Unset CA bundle variables
+        unset AWS_CA_BUNDLE
+        unset SSL_CERT_FILE
+        unset REQUESTS_CA_BUNDLE
 
-        # Remove Lambda permission
-        echo "Removing Lambda permission..."
-        aws lambda remove-permission \
-          --function-name rag-agent-system-ingest \
-          --statement-id AllowS3Invoke \
-          --region ap-southeast-2 2>/dev/null || echo "Lambda permission does not exist or already removed"
+        # Get AWS Account ID
+        AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+        echo "AWS Account ID: $AWS_ACCOUNT_ID"
 
-        # Delete Lambda functions if they exist
-        echo "Deleting Lambda function: rag-agent-system-ingest..."
-        aws lambda delete-function \
-          --function-name rag-agent-system-ingest \
-          --region ap-southeast-2 2>/dev/null || echo "Lambda ingest does not exist or already removed"
+        cd modules
 
-        echo "Deleting Lambda function: rag-agent-system-retrieve..."
-        aws lambda delete-function \
-          --function-name rag-agent-system-retrieve \
-          --region ap-southeast-2 2>/dev/null || echo "Lambda retrieve does not exist or already removed"
+        # Import S3 bucket
+        terraform import -var "ingest_artifact_key=ingest-${{ env.COMMIT_SHA }}.zip" \
+          -var "retrieve_artifact_key=retrieve-${{ env.COMMIT_SHA }}.zip" \
+          -var "artifact_bucket_name=${{ env.ARTIFACT_BUCKET }}" \
+          aws_s3_bucket.rag_documents "rag-agent-system-documents-ap-southeast-2-${AWS_ACCOUNT_ID}" 2>/dev/null || echo "S3 bucket not found or already imported"
 
-        # Wait a moment for deletions to propagate
-        sleep 5
-        echo "Cleanup complete"
+        # Import IAM roles
+        terraform import -var "ingest_artifact_key=ingest-${{ env.COMMIT_SHA }}.zip" \
+          -var "retrieve_artifact_key=retrieve-${{ env.COMMIT_SHA }}.zip" \
+          -var "artifact_bucket_name=${{ env.ARTIFACT_BUCKET }}" \
+          aws_iam_role.lambda_exec "rag-agent-system-lambda-exec-role" 2>/dev/null || echo "Lambda exec role not found or already imported"
+
+        terraform import -var "ingest_artifact_key=ingest-${{ env.COMMIT_SHA }}.zip" \
+          -var "retrieve_artifact_key=retrieve-${{ env.COMMIT_SHA }}.zip" \
+          -var "artifact_bucket_name=${{ env.ARTIFACT_BUCKET }}" \
+          aws_iam_role.kb_service_role "rag-agent-system-kb-service-role" 2>/dev/null || echo "KB service role not found or already imported"
+
+        # Import OpenSearch policies
+        terraform import -var "ingest_artifact_key=ingest-${{ env.COMMIT_SHA }}.zip" \
+          -var "retrieve_artifact_key=retrieve-${{ env.COMMIT_SHA }}.zip" \
+          -var "artifact_bucket_name=${{ env.ARTIFACT_BUCKET }}" \
+          aws_opensearchserverless_security_policy.encryption_policy "rag-agent-system-encrypt-policy,encryption" 2>/dev/null || echo "Encryption policy not found or already imported"
+
+        terraform import -var "ingest_artifact_key=ingest-${{ env.COMMIT_SHA }}.zip" \
+          -var "retrieve_artifact_key=retrieve-${{ env.COMMIT_SHA }}.zip" \
+          -var "artifact_bucket_name=${{ env.ARTIFACT_BUCKET }}" \
+          aws_opensearchserverless_security_policy.network_policy "rag-agent-system-network-policy,network" 2>/dev/null || echo "Network policy not found or already imported"
+
+        cd ..
+        echo "Import complete"
       continue-on-error: true
       env:
         AWS_REGION: ${{ vars.AWS_REGION }}
         NODE_TLS_REJECT_UNAUTHORIZED: '0'
+        AWS_EC2_METADATA_DISABLED: true
 
     # 2. Terraform Plan
     - name: Terraform Plan
