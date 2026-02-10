@@ -27,7 +27,8 @@ COPY src/components/gateway.py ./components/
 COPY src/components/mcp.py ./components/
 COPY src/components/memory.py ./components/
 COPY src/components/conversation_manager.py ./components/
-COPY src/components/rag.py ./components/
+
+COPY src/tools/kb_retrieval.py ./tools/
 
 COPY src/agent_runtime.py ./
 

@@ -1,4 +1,5 @@
 resource "aws_opensearchserverless_security_policy" "encryption_policy" {
+  provider = aws.bedrock
   name = "${var.project}-encrypt-policy"
   type = "encryption"
   
@@ -15,6 +16,7 @@ resource "aws_opensearchserverless_security_policy" "encryption_policy" {
 }
 
 resource "aws_opensearchserverless_security_policy" "network_policy" {
+  provider = aws.bedrock
   name = "${var.project}-network-policy"
   type = "network"
 
@@ -33,6 +35,7 @@ resource "aws_opensearchserverless_security_policy" "network_policy" {
 
 # 3. OpenSearch Serverless Collection
 resource "aws_opensearchserverless_collection" "rag_collection" {
+  provider = aws.bedrock
   name = "${var.project}-kb-collection"
   type = "VECTORSEARCH"
 
@@ -44,6 +47,7 @@ resource "aws_opensearchserverless_collection" "rag_collection" {
 
 # 4. Access Policy
 resource "aws_opensearchserverless_access_policy" "rag_data_access" {
+  provider = aws.bedrock
   name = "${var.project}-kb-access"
   type = "data"
 
@@ -104,18 +108,23 @@ resource "null_resource" "create_index" {
       python3 << 'PYTHON_SCRIPT'
 import boto3
 import time
+import ssl
+import urllib3
 from opensearchpy import OpenSearch, RequestsHttpConnection
 from requests_aws4auth import AWS4Auth
 
-region = '${var.region}'
+# Disable SSL warnings and verification for corporate proxy
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+region = 'ap-southeast-2'
 host = '${aws_opensearchserverless_collection.rag_collection.collection_endpoint}'
 host = host.replace('https://', '')
 
 print(f"Connecting to OpenSearch at: {host}")
 
-# Get AWS credentials
+# Get AWS credentials - disable SSL verification for boto3
 credentials = boto3.Session().get_credentials()
-sts_client = boto3.client('sts', region_name=region)
+sts_client = boto3.client('sts', region_name=region, verify=False)
 caller_identity = sts_client.get_caller_identity()
 print(f"Caller Identity ARN: {caller_identity['Arn']}")
 
@@ -137,7 +146,8 @@ for attempt in range(max_retries):
             hosts=[{'host': host, 'port': 443}],
             http_auth=awsauth,
             use_ssl=True,
-            verify_certs=True,
+            verify_certs=False,  # Disable SSL verification for corporate proxy
+            ssl_show_warn=False,
             connection_class=RequestsHttpConnection,
             timeout=300
         )

@@ -140,6 +140,9 @@ try:
                     "AWS_REGION": env_vars.get("AWS_REGION", REGION),
                     "COGNITO_USERNAME": env_vars.get("COGNITO_USERNAME", ""),
                     "COGNITO_PASSWORD": env_vars.get("COGNITO_PASSWORD", ""),
+                    "KNOWLEDGE_BASE_ID": KNOWLEDGE_BASE_ID,
+                    "BEDROCK_REGION": "ap-southeast-2",
+                    "BYPASS_TOOL_CONSENT": "true",  # Critical: disable confirmation prompts for automated operations
                 },
             )
 
